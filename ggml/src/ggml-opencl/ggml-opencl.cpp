@@ -4672,13 +4672,16 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
     // Adreno specific optimization: Use Map/Unmap for Zero-copy
     if (backend_ctx->gpu_family == ADRENO && tensor->type != GGML_TYPE_Q4_0) {
         ggml_backend_opencl_buffer_context * ctx = (ggml_backend_opencl_buffer_context *) buffer->context;
-        cl_int err;
-        void * mapped_ptr = clEnqueueMapBuffer(queue, ctx->buffer, CL_TRUE, CL_MAP_WRITE, offset, size, 0, NULL, NULL, &err);
-        CL_CHECK(err);
-        memcpy(mapped_ptr, data, size);
-        CL_CHECK(clEnqueueUnmapMemObject(queue, ctx->buffer, mapped_ptr, 0, NULL, NULL));
-        CL_CHECK(clFinish(queue));
-        return;
+        if (!ctx->buffer.empty()) {
+            cl_int err;
+            void * mapped_ptr = clEnqueueMapBuffer(queue, ctx->buffer[0], CL_TRUE, CL_MAP_WRITE, offset, size, 0, NULL, NULL, &err);
+            if (err == CL_SUCCESS) {
+                memcpy(mapped_ptr, data, size);
+                CL_CHECK(clEnqueueUnmapMemObject(queue, ctx->buffer[0], mapped_ptr, 0, NULL, NULL));
+                CL_CHECK(clFinish(queue));
+                return;
+            }
+        }
     }
 
 #ifdef GGML_OPENCL_SOA_Q
@@ -5635,13 +5638,16 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
     // Adreno specific optimization: Use Map/Unmap for Zero-copy
     if (backend_ctx->gpu_family == ADRENO && tensor->type != GGML_TYPE_Q4_0) {
         ggml_backend_opencl_buffer_context * ctx = (ggml_backend_opencl_buffer_context *) buffer->context;
-        cl_int err;
-        void * mapped_ptr = clEnqueueMapBuffer(queue, ctx->buffer, CL_TRUE, CL_MAP_READ, offset, size, 0, NULL, NULL, &err);
-        CL_CHECK(err);
-        memcpy(data, mapped_ptr, size);
-        CL_CHECK(clEnqueueUnmapMemObject(queue, ctx->buffer, mapped_ptr, 0, NULL, NULL));
-        CL_CHECK(clFinish(queue));
-        return;
+        if (!ctx->buffer.empty()) {
+            cl_int err;
+            void * mapped_ptr = clEnqueueMapBuffer(queue, ctx->buffer[0], CL_TRUE, CL_MAP_READ, offset, size, 0, NULL, NULL, &err);
+            if (err == CL_SUCCESS) {
+                memcpy(data, mapped_ptr, size);
+                CL_CHECK(clEnqueueUnmapMemObject(queue, ctx->buffer[0], mapped_ptr, 0, NULL, NULL));
+                CL_CHECK(clFinish(queue));
+                return;
+            }
+        }
     }
 
 #ifdef GGML_OPENCL_SOA_Q
