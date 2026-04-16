@@ -2,7 +2,7 @@
 
 #ifdef cl_intel_subgroups
 #pragma OPENCL EXTENSION cl_intel_subgroups : enable
-#else
+#elif defined(cl_khr_subgroups)
 #pragma OPENCL EXTENSION cl_khr_subgroups : enable
 #endif
 
@@ -12,10 +12,20 @@
 #define REQD_SUBGROUP_SIZE_16 __attribute__((intel_reqd_sub_group_size(16)))
 #define REQD_SUBGROUP_SIZE_32 __attribute__((intel_reqd_sub_group_size(32)))
 #elif defined(cl_qcom_reqd_sub_group_size)
+// Some Adreno compilers crash with this extension even if it is reported as supported
+#ifndef GGML_OPENCL_USE_ADRENO_KERNELS
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size : enable
 #define ADRENO_GPU 1
 #define REQD_SUBGROUP_SIZE_64  __attribute__((qcom_reqd_sub_group_size("half")))
 #define REQD_SUBGROUP_SIZE_128 __attribute__((qcom_reqd_sub_group_size("full")))
+#else
+#define ADRENO_GPU 1
+#define REQD_SUBGROUP_SIZE_64
+#define REQD_SUBGROUP_SIZE_128
+#endif
+#else
+#define REQD_SUBGROUP_SIZE_64
+#define REQD_SUBGROUP_SIZE_128
 #endif
 
 //------------------------------------------------------------------------------
@@ -59,21 +69,42 @@ kernel void kernel_rms_norm(
         sumf += x[i00] * x[i00];
     }
     all_sum = sumf.s0 + sumf.s1 + sumf.s2 + sumf.s3;
+
+#if defined(cl_khr_subgroups) && !defined(GGML_OPENCL_USE_ADRENO_KERNELS)
     all_sum = sub_group_reduce_add(all_sum);
     if (get_sub_group_local_id() == 0) {
         sum[get_sub_group_id()] = all_sum;
     }
+#else
+    // Fallback to local memory reduction for Adreno to avoid compiler crash
+    local float l_sum[1024]; 
+    l_sum[get_local_id(0)] = all_sum;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int i = get_local_size(0) / 2; i > 0; i /= 2) {
+        if (get_local_id(0) < i) {
+            l_sum[get_local_id(0)] += l_sum[get_local_id(0) + i];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    if (get_local_id(0) == 0) {
+        sum[0] = l_sum[0];
+    }
+#endif
 
     barrier(CLK_LOCAL_MEM_FENCE);
+    
+#if defined(cl_khr_subgroups) && !defined(GGML_OPENCL_USE_ADRENO_KERNELS)
     // broadcast
     for (uint i = get_local_size(0) / get_max_sub_group_size() / 2; i > 0; i /= 2) {
        if (get_local_id(0) < i) {
            sum[get_local_id(0)] += sum[get_local_id(0) + i];
        }
     }
+#endif
+
     if (get_local_id(0) == 0) {
         for (int i = 4 * (ne00 / 4); i < ne00; i++) {
-            sum[0] += x_scalar[i];
+            sum[0] += x_scalar[i] * x_scalar[i];
         }
         sum[0] /= ne00;
     }
@@ -94,6 +125,7 @@ kernel void kernel_rms_norm(
         }
     }
 }
+
 
 //------------------------------------------------------------------------------
 // rms_norm_mul
