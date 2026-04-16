@@ -24,11 +24,29 @@
 *   **Subgroups:** `cl_khr_subgroups` 확장 기능을 사용하여 워프(Warp) 단위의 효율적인 데이터 공유를 구현합니다.
 
 ## 3. 구현 및 수정 체크리스트
-- [ ] `ggml-opencl.cpp` 내 Adreno 전용 초기화 로직 추가
-- [ ] Adreno 660 지원 여부 확인 루틴 (`CL_DEVICE_NAME`)
-- [ ] FP32 -> FP16 커널 변환 및 성능 검증
-- [ ] `matmul` 커널의 Image2D 기반 리팩토링
-- [ ] Android 빌드 스크립트 (`CMakeLists.txt`) 최적화 플래그 적용
+- [x] `ggml-opencl.cpp` 내 커널 컴파일 옵션에 `-DGGML_OPENCL_USE_ADRENO_KERNELS` 추가
+- [x] `rms_norm.cl`: Subgroup 기능 우회 및 RMS 계산 수식 교정
+- [x] `mean.cl`: Adreno 6xx용 로컬 메모리 Reduction 구현
+- [x] `sum_rows.cl`: Adreno 6xx용 로컬 메모리 Reduction 구현
+- [x] `cumsum.cl`: Adreno 6xx용 로컬 메모리 Prefix Sum (Scan) 구현
+- [x] `group_norm.cl`: Adreno 6xx용 로컬 메모리 Reduction 구현
 
-## 4. 디버깅 및 테스트 로그 (업데이트 예정)
-*(여기에 발생하는 오류 로그와 해결 과정을 기록합니다)*
+## 4. 디버깅 및 테스트 로그
+
+### 문제 현상
+*   **증상:** OpenCL 커널 로딩 중 `[rms_norm]`, `[mean]`, `[sum_rows]`, `[cumsum]`, `[group_norm]` 단계에서 Segmentation Fault 발생.
+*   **원인:** Adreno 660 드라이버(OpenCL 2.0, Compiler E031.38.01.08)의 컴파일러가 Subgroup 확장 기능(`sub_group_reduce_add` 등) 및 전용 속성(`qcom_reqd_sub_group_size`)을 파싱하거나 최적화하는 과정에서 내부 오류로 크래시 발생.
+
+### 해결 방법
+1.  **호스트 코드 수정 (`ggml-opencl.cpp`):**
+    *   커널 컴파일 시 `-DGGML_OPENCL_USE_ADRENO_KERNELS` 매크로를 명시적으로 전달하여 커널 내부에서 Adreno 특화 분기 로직이 작동하도록 함.
+2.  **커널 코드 수정 (공통 전략):**
+    *   `__OPENCL_VERSION__ >= 300` 조건을 사용하여 OpenCL 3.0 이상을 지원하는 최신 Adreno(7xx, 8xx)에서는 고성능 Subgroup 기능을 유지함.
+    *   OpenCL 2.0 환경(Adreno 6xx 등)에서는 컴파일러 크래시를 방지하기 위해 `local memory` 기반의 Reduction/Scan 로직으로 우회 구현.
+    *   `qcom_reqd_sub_group_size` 속성이 컴파일러 파싱 에러를 유발하는 경우 조건부로 비활성화.
+3.  **수식 교정:**
+    *   `rms_norm.cl`에서 제곱 합 계산 시 누락되었던 제곱 연산을 추가하여 연산 정확도 확보.
+
+### 결과
+*   모든 OpenCL 커널이 정상적으로 로드됨.
+*   Adreno 660 GPU를 활용한 `llama-server` 및 추론 엔진 정상 동작 확인.
