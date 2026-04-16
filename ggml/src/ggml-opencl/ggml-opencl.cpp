@@ -4669,21 +4669,6 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
     cl_context context = backend_ctx->context;
     cl_command_queue queue = backend_ctx->queue;
 
-    // Adreno specific optimization: Use Map/Unmap for Zero-copy
-    if (backend_ctx->gpu_family == ADRENO && tensor->type != GGML_TYPE_Q4_0) {
-        ggml_backend_opencl_buffer_context * ctx = (ggml_backend_opencl_buffer_context *) buffer->context;
-        if (!ctx->buffer.empty()) {
-            cl_int err;
-            void * mapped_ptr = clEnqueueMapBuffer(queue, ctx->buffer[0], CL_TRUE, CL_MAP_WRITE, offset, size, 0, NULL, NULL, &err);
-            if (err == CL_SUCCESS) {
-                memcpy(mapped_ptr, data, size);
-                CL_CHECK(clEnqueueUnmapMemObject(queue, ctx->buffer[0], mapped_ptr, 0, NULL, NULL));
-                CL_CHECK(clFinish(queue));
-                return;
-            }
-        }
-    }
-
 #ifdef GGML_OPENCL_SOA_Q
     // We separate the quantized bits and scale from block_q4_0 by using an
     // additional kernel, where each thread handles a block. We first read the
@@ -5634,21 +5619,6 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
 
     // Make sure all previously submitted commands in other devices are finished.
     sync_with_other_backends(backend_ctx);
-
-    // Adreno specific optimization: Use Map/Unmap for Zero-copy
-    if (backend_ctx->gpu_family == ADRENO && tensor->type != GGML_TYPE_Q4_0) {
-        ggml_backend_opencl_buffer_context * ctx = (ggml_backend_opencl_buffer_context *) buffer->context;
-        if (!ctx->buffer.empty()) {
-            cl_int err;
-            void * mapped_ptr = clEnqueueMapBuffer(queue, ctx->buffer[0], CL_TRUE, CL_MAP_READ, offset, size, 0, NULL, NULL, &err);
-            if (err == CL_SUCCESS) {
-                memcpy(data, mapped_ptr, size);
-                CL_CHECK(clEnqueueUnmapMemObject(queue, ctx->buffer[0], mapped_ptr, 0, NULL, NULL));
-                CL_CHECK(clFinish(queue));
-                return;
-            }
-        }
-    }
 
 #ifdef GGML_OPENCL_SOA_Q
     // In end-to-end runs, get_tensor is usually used to get back the logits,
