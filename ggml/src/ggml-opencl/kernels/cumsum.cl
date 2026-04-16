@@ -6,10 +6,20 @@
 #define REQD_SUBGROUP_SIZE_16 __attribute__((intel_reqd_sub_group_size(16)))
 #define REQD_SUBGROUP_SIZE_32 __attribute__((intel_reqd_sub_group_size(32)))
 #elif defined(cl_qcom_reqd_sub_group_size)
+// Some Adreno compilers crash with this extension even if it is reported as supported
+#ifndef GGML_OPENCL_USE_ADRENO_KERNELS
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size : enable
 #define ADRENO_GPU 1
 #define REQD_SUBGROUP_SIZE_64  __attribute__((qcom_reqd_sub_group_size("half")))
 #define REQD_SUBGROUP_SIZE_128 __attribute__((qcom_reqd_sub_group_size("full")))
+#else
+#define ADRENO_GPU 1
+#define REQD_SUBGROUP_SIZE_64
+#define REQD_SUBGROUP_SIZE_128
+#endif
+#else
+#define REQD_SUBGROUP_SIZE_64
+#define REQD_SUBGROUP_SIZE_128
 #endif
 
 // max workgroup size is usually 1024, this covers various subgroups sizes
@@ -48,9 +58,11 @@ kernel void kernel_cumsum_blk(
     const int nth = get_local_size(0);
     const int tid = get_local_id(0);
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     const uint sg_size = get_sub_group_size();
     const uint sg_id = get_sub_group_id();
     const uint sg_lid = get_sub_group_local_id();
+#endif
 
     const int ib = i1 / ne01;
     const int i00 = ib * nth;
@@ -62,13 +74,14 @@ kernel void kernel_cumsum_blk(
     global       float * tmp_row  = (global float *)tmp + net0 * i01 + net0 * net1 * i02 + net0 * net1 * net2 * i03;
     global       float * dst_row  = (global float *)dst + i03*ne02*ne01*ne00 + i02*ne01*ne00 + i01*ne00;
 
-    __local float partial[MAX_SUBGROUPS];
+    __local float partial[1024];
 
     float v = 0.0f;
     if (i00 + tid < ne00) {
         v = src0_row[i00 + tid];
     }
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     float s = sub_group_scan_inclusive_add(v);
     if (sg_lid == sg_size - 1) {
         partial[sg_id] = s;
@@ -90,6 +103,21 @@ kernel void kernel_cumsum_blk(
     barrier(CLK_LOCAL_MEM_FENCE);
 
     s += partial[sg_id];
+#else
+    // Fallback to local memory scan for Adreno 6xx or OpenCL < 3.0 to avoid compiler crash
+    partial[tid] = v;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int offset = 1; offset < nth; offset <<= 1) {
+        float val = 0;
+        if (tid >= offset) {
+            val = partial[tid - offset];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+        partial[tid] += val;
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float s = partial[tid];
+#endif
 
     if (i00 + tid < ne00) {
         dst_row[i00 + tid] = s;
@@ -98,6 +126,7 @@ kernel void kernel_cumsum_blk(
         tmp_row[ib] = s;
     }
 }
+
 
 kernel void kernel_cumsum_add(
         global char * tmp,
