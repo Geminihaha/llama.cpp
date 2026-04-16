@@ -2,7 +2,7 @@
 
 #ifdef cl_intel_subgroups
 #pragma OPENCL EXTENSION cl_intel_subgroups : enable
-#else
+#elif defined(cl_khr_subgroups)
 #pragma OPENCL EXTENSION cl_khr_subgroups : enable
 #endif
 
@@ -12,10 +12,20 @@
 #define REQD_SUBGROUP_SIZE_16 __attribute__((intel_reqd_sub_group_size(16)))
 #define REQD_SUBGROUP_SIZE_32 __attribute__((intel_reqd_sub_group_size(32)))
 #elif defined(cl_qcom_reqd_sub_group_size)
+// Some Adreno compilers crash with this extension even if it is reported as supported
+#ifndef GGML_OPENCL_USE_ADRENO_KERNELS
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size : enable
 #define ADRENO_GPU 1
 #define REQD_SUBGROUP_SIZE_64  __attribute__((qcom_reqd_sub_group_size("half")))
 #define REQD_SUBGROUP_SIZE_128 __attribute__((qcom_reqd_sub_group_size("full")))
+#else
+#define ADRENO_GPU 1
+#define REQD_SUBGROUP_SIZE_64
+#define REQD_SUBGROUP_SIZE_128
+#endif
+#else
+#define REQD_SUBGROUP_SIZE_64
+#define REQD_SUBGROUP_SIZE_128
 #endif
 
 // Workgroup must be a subgroup
@@ -39,7 +49,10 @@ kernel void kernel_group_norm(
     int start = get_group_id(0) * group_size;
     int end   = start + group_size;
 
-    start += get_local_id(0);
+    const int lid = get_local_id(0);
+    const int lsize = get_local_size(0);
+
+    start += lid;
 
     if (end >= ne) {
         end = ne;
@@ -47,26 +60,53 @@ kernel void kernel_group_norm(
 
     float tmp = 0.0f;
 
-    for (int j = start; j < end; j += get_local_size(0)) {
+    for (int j = start; j < end; j += lsize) {
         tmp += src0[j];
     }
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     tmp = sub_group_reduce_add(tmp);
+#else
+    // Fallback to local memory reduction for Adreno 6xx or OpenCL < 3.0 to avoid compiler crash
+    local float l_sum[1024];
+    l_sum[lid] = tmp;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int i = lsize / 2; i > 0; i /= 2) {
+        if (lid < i) {
+            l_sum[lid] += l_sum[lid + i];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    tmp = l_sum[0];
+#endif
 
     const float mean = tmp / group_size;
     tmp = 0.0f;
 
-    for (int j = start; j < end; j += get_local_size(0)) {
+    for (int j = start; j < end; j += lsize) {
         float xi = src0[j] - mean;
         dst[j] = xi;
         tmp += xi * xi;
     }
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     tmp = sub_group_reduce_add(tmp);
+#else
+    // Fallback to local memory reduction for Adreno 6xx or OpenCL < 3.0 to avoid compiler crash
+    l_sum[lid] = tmp;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int i = lsize / 2; i > 0; i /= 2) {
+        if (lid < i) {
+            l_sum[lid] += l_sum[lid + i];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    tmp = l_sum[0];
+#endif
 
     const float variance = tmp / group_size;
     const float scale = 1.0f/sqrt(variance + eps);
-    for (int j = start; j < end; j += get_local_size(0)) {
+    for (int j = start; j < end; j += lsize) {
         dst[j] *= scale;
     }
 }
@@ -99,23 +139,45 @@ kernel void kernel_group_norm_mul_add(
         end = ne;
     }
 
+    const int lid = get_local_id(0);
+    const int lsize = get_local_size(0);
+
     float sum = 0.0f;
     float sum_sq = 0.0f;
 
-    for (int j = start + get_local_id(0); j < end; j += get_local_size(0)) {
+    for (int j = start + lid; j < end; j += lsize) {
         float val = src0[j];
         sum += val;
         sum_sq += val*val;
     }
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     sum = sub_group_reduce_add(sum);
     sum_sq = sub_group_reduce_add(sum_sq);
+#else
+    // Fallback to local memory reduction for Adreno 6xx or OpenCL < 3.0 to avoid compiler crash
+    local float l_sum[1024];
+    local float l_sum_sq[1024];
+    l_sum[lid] = sum;
+    l_sum_sq[lid] = sum_sq;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int i = lsize / 2; i > 0; i /= 2) {
+        if (lid < i) {
+            l_sum[lid] += l_sum[lid + i];
+            l_sum_sq[lid] += l_sum_sq[lid + i];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    sum = l_sum[0];
+    sum_sq = l_sum_sq[0];
+#endif
 
     const float mean = sum / group_size;
     const float var = sum_sq / group_size - mean * mean;
     const float scale = rsqrt(var + eps);
 
-    for (int j = start + get_local_id(0); j < end; j += get_local_size(0)) {
+    for (int j = start + lid; j < end; j += lsize) {
         dst[j] = ((src0[j] - mean) * scale) * src1[j] + src2[j];
     }
 }
+
