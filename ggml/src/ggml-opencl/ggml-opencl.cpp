@@ -6073,7 +6073,11 @@ static ggml_backend_buffer_t ggml_backend_opencl_buffer_type_alloc_buffer(ggml_b
         cl_mem_properties props[] = { (cl_mem_properties)0x41A6 /* CL_LARGE_BUFFER_QCOM */, (cl_mem_properties)1, (cl_mem_properties)0 };
         // clCreateBufferWithProperties is OpenCL 2.0 extension but often missing in headers
         typedef cl_mem (CL_API_CALL *clCreateBufferWithProperties_fn)(cl_context, const cl_mem_properties*, cl_mem_flags, size_t, void*, cl_int*);
-        static clCreateBufferWithProperties_fn clCreateBufferWithProperties_ptr = (clCreateBufferWithProperties_fn)clGetExtensionFunctionAddressForPlatform(backend_ctx->platform, "clCreateBufferWithProperties");
+        
+        cl_platform_id platform;
+        clGetDeviceInfo(backend_ctx->device, CL_DEVICE_PLATFORM, sizeof(cl_platform_id), &platform, NULL);
+        
+        clCreateBufferWithProperties_fn clCreateBufferWithProperties_ptr = (clCreateBufferWithProperties_fn)clGetExtensionFunctionAddressForPlatform(platform, "clCreateBufferWithProperties");
         if (clCreateBufferWithProperties_ptr) {
             mem = clCreateBufferWithProperties_ptr(backend_ctx->context, props, CL_MEM_READ_WRITE, size, NULL, &err);
         }
