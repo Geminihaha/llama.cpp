@@ -1,3 +1,5 @@
+#pragma OPENCL EXTENSION cl_khr_fp16 : enable
+
 #ifdef cl_intel_required_subgroup_size
 #pragma OPENCL EXTENSION cl_intel_required_subgroup_size : enable
 #define INTEL_GPU 1
@@ -92,6 +94,9 @@ kernel void kernel_mul_mv_q4_K_f32(
     const int lid = get_local_id(0);
     const int lsize = get_local_size(0);
 
+    // Local memory must be declared at kernel scope
+    __local float lmem[1024];
+
 #if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     int ix = get_sub_group_local_id()/8;  // super block index
     int it = get_sub_group_local_id()%8;  // block index (inside super block)
@@ -100,7 +105,7 @@ kernel void kernel_mul_mv_q4_K_f32(
 #else
     int ix = lid/8;
     int it = lid%8;
-    int first_row = (get_group_id(0) * (lsize / 64)) * N_DST; // Rough approximation for Adreno
+    int first_row = (get_group_id(0) * (lsize / 64)) * N_DST;
 #endif
 
     int iq = it/4;     // 0 or 1 - first or second half of the super block
@@ -199,7 +204,6 @@ kernel void kernel_mul_mv_q4_K_f32(
         }
 #else
         // Fallback to local memory reduction for Adreno 6xx
-        local float lmem[1024];
         lmem[lid] = sumf[row];
         barrier(CLK_LOCAL_MEM_FENCE);
         for (int i = lsize / 2; i > 0; i /= 2) {
@@ -211,7 +215,7 @@ kernel void kernel_mul_mv_q4_K_f32(
         if (lid == 0 && first_row + row < ne01) {
             dst_f32[first_row + row] = lmem[0];
         }
+        barrier(CLK_LOCAL_MEM_FENCE);
 #endif
     }
 }
-
