@@ -4669,6 +4669,18 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
     cl_context context = backend_ctx->context;
     cl_command_queue queue = backend_ctx->queue;
 
+    // Adreno specific optimization: Use Map/Unmap for Zero-copy
+    if (backend_ctx->gpu_family == ADRENO && tensor->type != GGML_TYPE_Q4_0) {
+        ggml_backend_opencl_buffer_context * ctx = (ggml_backend_opencl_buffer_context *) buffer->context;
+        cl_int err;
+        void * mapped_ptr = clEnqueueMapBuffer(queue, ctx->buffer, CL_TRUE, CL_MAP_WRITE, offset, size, 0, NULL, NULL, &err);
+        CL_CHECK(err);
+        memcpy(mapped_ptr, data, size);
+        CL_CHECK(clEnqueueUnmapMemObject(queue, ctx->buffer, mapped_ptr, 0, NULL, NULL));
+        CL_CHECK(clFinish(queue));
+        return;
+    }
+
 #ifdef GGML_OPENCL_SOA_Q
     // We separate the quantized bits and scale from block_q4_0 by using an
     // additional kernel, where each thread handles a block. We first read the
@@ -5620,6 +5632,18 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
     // Make sure all previously submitted commands in other devices are finished.
     sync_with_other_backends(backend_ctx);
 
+    // Adreno specific optimization: Use Map/Unmap for Zero-copy
+    if (backend_ctx->gpu_family == ADRENO && tensor->type != GGML_TYPE_Q4_0) {
+        ggml_backend_opencl_buffer_context * ctx = (ggml_backend_opencl_buffer_context *) buffer->context;
+        cl_int err;
+        void * mapped_ptr = clEnqueueMapBuffer(queue, ctx->buffer, CL_TRUE, CL_MAP_READ, offset, size, 0, NULL, NULL, &err);
+        CL_CHECK(err);
+        memcpy(data, mapped_ptr, size);
+        CL_CHECK(clEnqueueUnmapMemObject(queue, ctx->buffer, mapped_ptr, 0, NULL, NULL));
+        CL_CHECK(clFinish(queue));
+        return;
+    }
+
 #ifdef GGML_OPENCL_SOA_Q
     // In end-to-end runs, get_tensor is usually used to get back the logits,
     // where we can simply do clEnqueueReadBuffer since they are f32.
@@ -6172,7 +6196,14 @@ static ggml_backend_buffer_t ggml_backend_opencl_buffer_type_alloc_buffer(ggml_b
     size = std::max(size, (size_t)1);
 
     cl_int err;
-    cl_mem mem = clCreateBuffer(backend_ctx->context, CL_MEM_READ_WRITE, size, NULL, &err);
+    cl_mem_flags flags = CL_MEM_READ_WRITE;
+    
+    // Adreno specific optimization: Use ALLOC_HOST_PTR for zero-copy
+    if (backend_ctx->gpu_family == ADRENO) {
+        flags |= CL_MEM_ALLOC_HOST_PTR;
+    }
+
+    cl_mem mem = clCreateBuffer(backend_ctx->context, flags, size, NULL, &err);
     if (err != CL_SUCCESS && backend_ctx->adreno_use_large_buffer) {
         cl_mem_properties props[] = { (cl_mem_properties)0x41A6 /* CL_LARGE_BUFFER_QCOM */, (cl_mem_properties)1, (cl_mem_properties)0 };
         // clCreateBufferWithProperties is OpenCL 2.0 extension but often missing in headers
@@ -6183,7 +6214,7 @@ static ggml_backend_buffer_t ggml_backend_opencl_buffer_type_alloc_buffer(ggml_b
         
         clCreateBufferWithProperties_fn clCreateBufferWithProperties_ptr = (clCreateBufferWithProperties_fn)clGetExtensionFunctionAddressForPlatform(platform, "clCreateBufferWithProperties");
         if (clCreateBufferWithProperties_ptr) {
-            mem = clCreateBufferWithProperties_ptr(backend_ctx->context, props, CL_MEM_READ_WRITE, size, NULL, &err);
+            mem = clCreateBufferWithProperties_ptr(backend_ctx->context, props, flags, size, NULL, &err);
         }
     }
 
