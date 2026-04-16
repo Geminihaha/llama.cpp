@@ -4,10 +4,20 @@
 #define REQD_SUBGROUP_SIZE_16 __attribute__((intel_reqd_sub_group_size(16)))
 #define REQD_SUBGROUP_SIZE_32 __attribute__((intel_reqd_sub_group_size(32)))
 #elif defined(cl_qcom_reqd_sub_group_size)
+// Some Adreno compilers crash with this extension even if it is reported as supported
+#ifndef GGML_OPENCL_USE_ADRENO_KERNELS
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size : enable
 #define ADRENO_GPU 1
 #define REQD_SUBGROUP_SIZE_64  __attribute__((qcom_reqd_sub_group_size("half")))
 #define REQD_SUBGROUP_SIZE_128 __attribute__((qcom_reqd_sub_group_size("full")))
+#else
+#define ADRENO_GPU 1
+#define REQD_SUBGROUP_SIZE_64
+#define REQD_SUBGROUP_SIZE_128
+#endif
+#else
+#define REQD_SUBGROUP_SIZE_64
+#define REQD_SUBGROUP_SIZE_128
 #endif
 
 //------------------------------------------------------------------------------
@@ -79,8 +89,20 @@ kernel void kernel_mul_mv_q4_K_f32(
     ushort kmask2 = 0x0f0f;
     ushort kmask3 = 0xc0c0;
 
+    const int lid = get_local_id(0);
+    const int lsize = get_local_size(0);
+
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     int ix = get_sub_group_local_id()/8;  // super block index
     int it = get_sub_group_local_id()%8;  // block index (inside super block)
+    int first_row = (get_group_id(0) * N_SIMDGROUP + get_sub_group_id()) * N_DST;
+    const uint sg_lid = get_sub_group_local_id();
+#else
+    int ix = lid/8;
+    int it = lid%8;
+    int first_row = (get_group_id(0) * (lsize / 64)) * N_DST; // Rough approximation for Adreno
+#endif
+
     int iq = it/4;     // 0 or 1 - first or second half of the super block
     int ir = it%4;     // 0...3 - block index in the half super block
 
@@ -89,7 +111,6 @@ kernel void kernel_mul_mv_q4_K_f32(
     int r0 = get_group_id(0);
     int r1 = get_group_id(1);
     int im = get_group_id(2);
-    int first_row = (r0 * N_SIMDGROUP + get_sub_group_id()) * N_DST;
 
     int i12 = im%ne12;
     int i13 = im/ne12;
@@ -100,10 +121,9 @@ kernel void kernel_mul_mv_q4_K_f32(
     global block_q4_K * x = (global block_q4_K *) (src0 + offset_src0);
     global float      * y = (global float      *) (src1 + offset_src1);
 
-    float yl[16];
-    float yh[16];
+    half yl[16];
+    half yh[16];
     float sumf[N_DST] = {0.f};
-    float all_sum;
 
     global float * y4 = y + ix * QK_K + 64 * iq + 8 * ir;
 
@@ -113,17 +133,17 @@ kernel void kernel_mul_mv_q4_K_f32(
     for (int ib = ix; ib < nb; ib += BLOCK_STRIDE) {
         float4 sumy = {0.f, 0.f, 0.f, 0.f};
         for (int i = 0; i < 8; ++i) {
-            yl[i+0] = y4[i+0];
-            sumy.s0 += yl[i+0];
+            yl[i+0] = (half)y4[i+0];
+            sumy.s0 += (float)yl[i+0];
 
-            yl[i+8] = y4[i+32];
-            sumy.s1 += yl[i+8];
+            yl[i+8] = (half)y4[i+32];
+            sumy.s1 += (float)yl[i+8];
 
-            yh[i+0] = y4[i+128];
-            sumy.s2 += yh[i+0];
+            yh[i+0] = (half)y4[i+128];
+            sumy.s2 += (float)yh[i+0];
 
-            yh[i+8] = y4[i+160];
-            sumy.s3 += yh[i+8];
+            yh[i+8] = (half)y4[i+160];
+            sumy.s3 += (float)yh[i+8];
         }
 
         global ushort * sc = (global ushort *)x[ib].scales + iq;
@@ -138,25 +158,25 @@ kernel void kernel_mul_mv_q4_K_f32(
 
             global ushort * q2 = q1 + 32;
 
-            float4 acc1 = {0.f, 0.f, 0.f, 0.f};
-            float4 acc2 = {0.f, 0.f, 0.f, 0.f};
+            half4 acc1 = {0.h, 0.h, 0.h, 0.h};
+            half4 acc2 = {0.h, 0.h, 0.h, 0.h};
             for (int i = 0; i < 8; i += 2) {
-                acc1.s0 += yl[i+0] * (q1[i/2] & 0x000F);
-                acc1.s1 += yl[i+1] * (q1[i/2] & 0x0F00);
-                acc1.s2 += yl[i+8] * (q1[i/2] & 0x00F0);
-                acc1.s3 += yl[i+9] * (q1[i/2] & 0xF000);
-                acc2.s0 += yh[i+0] * (q2[i/2] & 0x000F);
-                acc2.s1 += yh[i+1] * (q2[i/2] & 0x0F00);
-                acc2.s2 += yh[i+8] * (q2[i/2] & 0x00F0);
-                acc2.s3 += yh[i+9] * (q2[i/2] & 0xF000);
+                acc1.s0 += yl[i+0] * (half)(q1[i/2] & 0x000F);
+                acc1.s1 += yl[i+1] * (half)(q1[i/2] & 0x0F00);
+                acc1.s2 += yl[i+8] * (half)(q1[i/2] & 0x00F0);
+                acc1.s3 += yl[i+9] * (half)(q1[i/2] & 0xF000);
+                acc2.s0 += yh[i+0] * (half)(q2[i/2] & 0x000F);
+                acc2.s1 += yh[i+1] * (half)(q2[i/2] & 0x0F00);
+                acc2.s2 += yh[i+8] * (half)(q2[i/2] & 0x00F0);
+                acc2.s3 += yh[i+9] * (half)(q2[i/2] & 0xF000);
             }
 
             float dall = dh[0];
             float dmin = dh[1];
-            sumf[row] += dall * ((acc1.s0 + 1.f/256.f * acc1.s1) * sc8[0] +
-                                 (acc1.s2 + 1.f/256.f * acc1.s3) * sc8[1] * 1.f/16.f +
-                                 (acc2.s0 + 1.f/256.f * acc2.s1) * sc8[4] +
-                                 (acc2.s2 + 1.f/256.f * acc2.s3) * sc8[5] * 1.f/16.f) -
+            sumf[row] += dall * (( (float)acc1.s0 + 1.f/256.f * (float)acc1.s1) * sc8[0] +
+                                 ( (float)acc1.s2 + 1.f/256.f * (float)acc1.s3) * sc8[1] * 1.f/16.f +
+                                 ( (float)acc2.s0 + 1.f/256.f * (float)acc2.s1) * sc8[4] +
+                                 ( (float)acc2.s2 + 1.f/256.f * (float)acc2.s3) * sc8[5] * 1.f/16.f) -
                          dmin * (sumy.s0 * sc8[2] + sumy.s1 * sc8[3] + sumy.s2 * sc8[6] + sumy.s3 * sc8[7]);
 
             q1 += nb01/2;
@@ -170,11 +190,28 @@ kernel void kernel_mul_mv_q4_K_f32(
     global float * dst_f32 = (global float *) dst + im*ne0*ne1 + r1*ne0;
 
     for (int row = 0; row < N_DST; ++row) {
-        all_sum = sub_group_reduce_add(sumf[row]);
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
+        float all_sum = sub_group_reduce_add(sumf[row]);
         if (first_row + row < ne01) {
-            if (get_sub_group_local_id() == 0) {
+            if (sg_lid == 0) {
                 dst_f32[first_row + row] = all_sum;
             }
         }
+#else
+        // Fallback to local memory reduction for Adreno 6xx
+        local float lmem[1024];
+        lmem[lid] = sumf[row];
+        barrier(CLK_LOCAL_MEM_FENCE);
+        for (int i = lsize / 2; i > 0; i /= 2) {
+            if (lid < i) {
+                lmem[lid] += lmem[lid + i];
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+        }
+        if (lid == 0 && first_row + row < ne01) {
+            dst_f32[first_row + row] = lmem[0];
+        }
+#endif
     }
 }
+
