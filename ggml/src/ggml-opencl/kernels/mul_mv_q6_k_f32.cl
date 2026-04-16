@@ -103,13 +103,28 @@ kernel void kernel_mul_mv_q6_K_f32(
     uchar kmask3 = 0x30;
     uchar kmask4 = 0xC0;
 
+    const int lid = get_local_id(0);
+    const int lsize = get_local_size(0);
+
+    // Local memory must be declared at kernel scope
+    __local float lmem[1024];
+
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
+    const uint sg_id = get_sub_group_id();
+    const uint sg_lid = get_sub_group_local_id();
+#endif
+
     int nb = ne00/QK_K;
 
     int r0 = get_group_id(0);
     int r1 = get_group_id(1);
     int im = get_group_id(2);
 
-    int row = N_SIMDGROUP * r0 + get_sub_group_id();
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
+    int row = N_SIMDGROUP * r0 + sg_id;
+#else
+    int row = N_SIMDGROUP * r0 + (lid / 64);
+#endif
 
     if (row >= ne01) {
         return;
@@ -139,8 +154,13 @@ kernel void kernel_mul_mv_q6_K_f32(
     // Thread0 - thread3 work on subblocks 0, 2, 4, 6; thread4 - thread7 work on
     // subblocks 1, 3, 5, 7. Each thread does not work on an entire subblock, but
     // works on a total of 16 weight values.
-    int tid  = get_sub_group_local_id()/BLOCK_STRIDE; // first block_stride groups have tid=0
-    int ix   = get_sub_group_local_id()%BLOCK_STRIDE; // first block is 0..block_stride-1
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
+    int tid  = sg_lid/BLOCK_STRIDE; // first block_stride groups have tid=0
+    int ix   = sg_lid%BLOCK_STRIDE; // first block is 0..block_stride-1
+#else
+    int tid  = (lid % 64)/BLOCK_STRIDE;
+    int ix   = (lid % 64)%BLOCK_STRIDE;
+#endif
     int ip   = tid/8;   // first or second half of (super) block (0 or 1)
     int il   = tid%8;   // each half has 8 parts, one per scale
     int n    = 4;       // 4 scales at a time (and 4 sums)
@@ -162,33 +182,49 @@ kernel void kernel_mul_mv_q6_K_f32(
 
         float dall = x[i].d;
 
-        float4 sums = {0.f, 0.f, 0.f, 0.f};
+        half4 sums = {0.h, 0.h, 0.h, 0.h};
 
-        sums.s0 += y[0+ 0] * ((float)((q1[0] & 0xF) | ((qh[0] & kmask1) << 4)) - 32.f);
-        sums.s1 += y[0+32] * ((float)((q2[0] & 0xF) | ((qh[0] & kmask2) << 2)) - 32.f);
-        sums.s2 += y[0+64] * ((float)((q1[0]  >> 4) | ((qh[0] & kmask3) << 0)) - 32.f);
-        sums.s3 += y[0+96] * ((float)((q2[0]  >> 4) | ((qh[0] & kmask4) >> 2)) - 32.f);
+        sums.s0 += (half)y[0+ 0] * (half)((float)((q1[0] & 0xF) | ((qh[0] & kmask1) << 4)) - 32.f);
+        sums.s1 += (half)y[0+32] * (half)((float)((q2[0] & 0xF) | ((qh[0] & kmask2) << 2)) - 32.f);
+        sums.s2 += (half)y[0+64] * (half)((float)((q1[0]  >> 4) | ((qh[0] & kmask3) << 0)) - 32.f);
+        sums.s3 += (half)y[0+96] * (half)((float)((q2[0]  >> 4) | ((qh[0] & kmask4) >> 2)) - 32.f);
 
-        sums.s0 += y[1+ 0] * ((float)((q1[1] & 0xF) | ((qh[1] & kmask1) << 4)) - 32.f);
-        sums.s1 += y[1+32] * ((float)((q2[1] & 0xF) | ((qh[1] & kmask2) << 2)) - 32.f);
-        sums.s2 += y[1+64] * ((float)((q1[1]  >> 4) | ((qh[1] & kmask3) << 0)) - 32.f);
-        sums.s3 += y[1+96] * ((float)((q2[1]  >> 4) | ((qh[1] & kmask4) >> 2)) - 32.f);
+        sums.s0 += (half)y[1+ 0] * (half)((float)((q1[1] & 0xF) | ((qh[1] & kmask1) << 4)) - 32.f);
+        sums.s1 += (half)y[1+32] * (half)((float)((q2[1] & 0xF) | ((qh[1] & kmask2) << 2)) - 32.f);
+        sums.s2 += (half)y[1+64] * (half)((float)((q1[1]  >> 4) | ((qh[1] & kmask3) << 0)) - 32.f);
+        sums.s3 += (half)y[1+96] * (half)((float)((q2[1]  >> 4) | ((qh[1] & kmask4) >> 2)) - 32.f);
 
-        sums.s0 += y[2+ 0] * ((float)((q1[2] & 0xF) | ((qh[2] & kmask1) << 4)) - 32.f);
-        sums.s1 += y[2+32] * ((float)((q2[2] & 0xF) | ((qh[2] & kmask2) << 2)) - 32.f);
-        sums.s2 += y[2+64] * ((float)((q1[2]  >> 4) | ((qh[2] & kmask3) << 0)) - 32.f);
-        sums.s3 += y[2+96] * ((float)((q2[2]  >> 4) | ((qh[2] & kmask4) >> 2)) - 32.f);
+        sums.s0 += (half)y[2+ 0] * (half)((float)((q1[2] & 0xF) | ((qh[2] & kmask1) << 4)) - 32.f);
+        sums.s1 += (half)y[2+32] * (half)((float)((q2[2] & 0xF) | ((qh[2] & kmask2) << 2)) - 32.f);
+        sums.s2 += (half)y[2+64] * (half)((float)((q1[2]  >> 4) | ((qh[2] & kmask3) << 0)) - 32.f);
+        sums.s3 += (half)y[2+96] * (half)((float)((q2[2]  >> 4) | ((qh[2] & kmask4) >> 2)) - 32.f);
 
-        sums.s0 += y[3+ 0] * ((float)((q1[3] & 0xF) | ((qh[3] & kmask1) << 4)) - 32.f);
-        sums.s1 += y[3+32] * ((float)((q2[3] & 0xF) | ((qh[3] & kmask2) << 2)) - 32.f);
-        sums.s2 += y[3+64] * ((float)((q1[3]  >> 4) | ((qh[3] & kmask3) << 0)) - 32.f);
-        sums.s3 += y[3+96] * ((float)((q2[3]  >> 4) | ((qh[3] & kmask4) >> 2)) - 32.f);
+        sums.s0 += (half)y[3+ 0] * (half)((float)((q1[3] & 0xF) | ((qh[3] & kmask1) << 4)) - 32.f);
+        sums.s1 += (half)y[3+32] * (half)((float)((q2[3] & 0xF) | ((qh[3] & kmask2) << 2)) - 32.f);
+        sums.s2 += (half)y[3+64] * (half)((float)((q1[3]  >> 4) | ((qh[3] & kmask3) << 0)) - 32.f);
+        sums.s3 += (half)y[3+96] * (half)((float)((q2[3]  >> 4) | ((qh[3] & kmask4) >> 2)) - 32.f);
 
-        sumf += dall * (sums.s0 * sc[0] + sums.s1 * sc[2] + sums.s2 * sc[4] + sums.s3 * sc[6]);
+        sumf += dall * ((float)sums.s0 * sc[0] + (float)sums.s1 * sc[2] + (float)sums.s2 * sc[4] + (float)sums.s3 * sc[6]);
     }
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     float tot = sub_group_reduce_add(sumf);
-    if (get_sub_group_local_id() == 0) {
+    if (sg_lid == 0) {
         dst[r1*ne0 + im*ne0*ne1 + row] = tot;
     }
+#else
+    // Fallback to local memory reduction for Adreno 6xx
+    lmem[lid] = sumf;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int i = lsize / 2; i > 0; i /= 2) {
+        if (lid < i) {
+            lmem[lid] += lmem[lid + i];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    if (lid == 0) {
+        dst[r1*ne0 + im*ne0*ne1 + row] = lmem[0];
+    }
+#endif
 }
+
