@@ -9849,8 +9849,8 @@ static void ggml_cl_mul_mat_q4_1_f32_adreno(ggml_backend_t backend, const ggml_t
         CL_CHECK(clSetKernelArg(kernel, 6, sizeof(cl_int),   &ne00));
         CL_CHECK(clSetKernelArg(kernel, 7, sizeof(cl_int),   &ne01));
 
-        size_t local_work_size[3] = {64, 2, 1};
-        size_t global_work_size[3] = {(size_t)CEIL_DIV(ne01/2, 64)*64, 2, 1};
+        size_t local_work_size[3] = {64, 4, 1};
+        size_t global_work_size[3] = {(size_t)CEIL_DIV(ne01/2, 64)*64, 4, 1};
 
         backend_ctx->enqueue_ndrange_kernel(kernel, 3, global_work_size, local_work_size, dst);
 
@@ -9931,8 +9931,8 @@ static void ggml_cl_mul_mat_q4_1_f32_adreno(ggml_backend_t backend, const ggml_t
         CL_CHECK(clSetKernelArg(kernel, 8, sizeof(cl_int),   &ne00));
         CL_CHECK(clSetKernelArg(kernel, 9, sizeof(cl_int),   &ne1));
 
-        size_t global_work_size[3] = {(size_t)CEIL_DIV(ne1, 8)*8, (size_t)CEIL_DIV(ne01, 8)*8, 1};
-        size_t local_work_size[3] = {8, 8, 1};
+        size_t global_work_size[3] = {(size_t)CEIL_DIV(ne1, 8), (size_t)CEIL_DIV(ne01, 4), 1};
+        size_t local_work_size[3] = {1, 128, 1};
 
         backend_ctx->enqueue_ndrange_kernel(kernel, 3, global_work_size, local_work_size, dst);
 
@@ -10284,8 +10284,8 @@ static void ggml_cl_mul_mat_q4_k_f32_adreno(ggml_backend_t backend, const ggml_t
         CL_CHECK(clSetKernelArg(kernel, 10, sizeof(cl_uchar), &mask_d4));
         CL_CHECK(clSetKernelArg(kernel, 11, sizeof(cl_uchar), &mask_hi2));
 
-        size_t local_work_size[3] = {64, 2, 1};
-        size_t global_work_size[3] = {(size_t)CEIL_DIV(ne01/2, 64)*64, 2, 1};
+        size_t local_work_size[3] = {64, 4, 1};
+        size_t global_work_size[3] = {(size_t)CEIL_DIV(ne01/2, 64)*64, 4, 1};
 
         backend_ctx->enqueue_ndrange_kernel(kernel, 3, global_work_size, local_work_size, dst);
 
@@ -10371,8 +10371,8 @@ static void ggml_cl_mul_mat_q4_k_f32_adreno(ggml_backend_t backend, const ggml_t
         CL_CHECK(clSetKernelArg(kernel, 12, sizeof(cl_uchar), &mask_d4));
         CL_CHECK(clSetKernelArg(kernel, 13, sizeof(cl_uchar), &mask_hi2));
 
-        size_t global_work_size[3] = {(size_t)CEIL_DIV(ne1, 8)*8, (size_t)CEIL_DIV(ne01, 8)*8, 1};
-        size_t local_work_size[3] = {8, 8, 1};
+        size_t global_work_size[3] = {(size_t)CEIL_DIV(ne1, 8), (size_t)CEIL_DIV(ne01, 4), 1};
+        size_t local_work_size[3] = {1, 128, 1};
 
         backend_ctx->enqueue_ndrange_kernel(kernel, 3, global_work_size, local_work_size, dst);
         CL_CHECK(clReleaseMemObject(b_sub_buf));
@@ -10470,8 +10470,8 @@ static void ggml_cl_mul_mat_q6_K_f32_adreno(ggml_backend_t backend, const ggml_t
         CL_CHECK(clSetKernelArg(kernel, 7, sizeof(cl_int),   &ne00));
         CL_CHECK(clSetKernelArg(kernel, 8, sizeof(cl_int),   &ne01));
 
-        size_t local_work_size[3] = {64, 2, 1};
-        size_t global_work_size[3] = {(size_t)CEIL_DIV(ne01/2, 64)*64, 2, 1};
+        size_t local_work_size[3] = {64, 4, 1};
+        size_t global_work_size[3] = {(size_t)CEIL_DIV(ne01/2, 64)*64, 4, 1};
 
         backend_ctx->enqueue_ndrange_kernel(kernel, 3, global_work_size, local_work_size, dst);
 
