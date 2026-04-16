@@ -2,7 +2,7 @@
 
 #ifdef cl_intel_subgroups
 #pragma OPENCL EXTENSION cl_intel_subgroups : enable
-#else
+#elif defined(cl_khr_subgroups)
 #pragma OPENCL EXTENSION cl_khr_subgroups : enable
 #endif
 
@@ -12,10 +12,20 @@
 #define REQD_SUBGROUP_SIZE_16 __attribute__((intel_reqd_sub_group_size(16)))
 #define REQD_SUBGROUP_SIZE_32 __attribute__((intel_reqd_sub_group_size(32)))
 #elif defined(cl_qcom_reqd_sub_group_size)
+// Some Adreno compilers crash with this extension even if it is reported as supported
+#ifndef GGML_OPENCL_USE_ADRENO_KERNELS
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size : enable
 #define ADRENO_GPU 1
 #define REQD_SUBGROUP_SIZE_64  __attribute__((qcom_reqd_sub_group_size("half")))
 #define REQD_SUBGROUP_SIZE_128 __attribute__((qcom_reqd_sub_group_size("full")))
+#else
+#define ADRENO_GPU 1
+#define REQD_SUBGROUP_SIZE_64
+#define REQD_SUBGROUP_SIZE_128
+#endif
+#else
+#define REQD_SUBGROUP_SIZE_64
+#define REQD_SUBGROUP_SIZE_128
 #endif
 
 #define N_F16_F16 4
@@ -67,6 +77,9 @@ kernel void kernel_mul_mat_f16_f16(
     const int lid = get_local_id(0);
     const int lsize = get_local_size(0);
 
+    // Local memory must be declared at kernel scope
+    __local float lmem[1024];
+
 #if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     const uint sg_id = get_sub_group_id();
     const uint sg_lid = get_sub_group_local_id();
@@ -97,7 +110,6 @@ kernel void kernel_mul_mat_f16_f16(
             for (int i = lid; i < ne00; i += lsize) {
                 sumf += (float)((half) x[i] * (half) y[i]);
             }
-            local float lmem[1024];
             lmem[lid] = sumf;
             barrier(CLK_LOCAL_MEM_FENCE);
             for (int i = lsize / 2; i > 0; i /= 2) {
@@ -109,6 +121,7 @@ kernel void kernel_mul_mat_f16_f16(
             if (lid == 0) {
                 dst[im*ne1*ne0 + r1*ne0 + r0] = lmem[0];
             }
+            barrier(CLK_LOCAL_MEM_FENCE); // Sync before next row reuse lmem
 #endif
         }
     } else {
@@ -147,7 +160,6 @@ kernel void kernel_mul_mat_f16_f16(
                 sumf += (float)((half) x4[i].s2 * (half) y4[i].s2);
                 sumf += (float)((half) x4[i].s3 * (half) y4[i].s3);
             }
-            local float lmem[1024];
             lmem[lid] = sumf;
             barrier(CLK_LOCAL_MEM_FENCE);
             for (int i = lsize / 2; i > 0; i /= 2) {
@@ -163,8 +175,8 @@ kernel void kernel_mul_mat_f16_f16(
                 }
                 dst[im*ne1*ne0 + r1*ne0 + r0] = all_sum;
             }
+            barrier(CLK_LOCAL_MEM_FENCE); // Sync before next row reuse lmem
 #endif
         }
     }
 }
-
