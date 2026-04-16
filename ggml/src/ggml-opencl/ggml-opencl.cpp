@@ -805,6 +805,10 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx, ggml_cl_ve
                                " -cl-mad-enable -cl-unsafe-math-optimizations"
                                " -cl-finite-math-only -cl-fast-relaxed-math";
 
+#ifdef GGML_OPENCL_USE_ADRENO_KERNELS
+    compile_opts += " -DGGML_OPENCL_USE_ADRENO_KERNELS ";
+#endif
+
     if (backend_ctx->adreno_use_large_buffer) {
         compile_opts += " -qcom-enable-large-buffer ";
     }

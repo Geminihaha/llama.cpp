@@ -70,13 +70,13 @@ kernel void kernel_rms_norm(
     }
     all_sum = sumf.s0 + sumf.s1 + sumf.s2 + sumf.s3;
 
-#if defined(cl_khr_subgroups) && !defined(GGML_OPENCL_USE_ADRENO_KERNELS)
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     all_sum = sub_group_reduce_add(all_sum);
     if (get_sub_group_local_id() == 0) {
         sum[get_sub_group_id()] = all_sum;
     }
 #else
-    // Fallback to local memory reduction for Adreno to avoid compiler crash
+    // Fallback to local memory reduction for Adreno 6xx or OpenCL < 3.0 to avoid compiler crash
     local float l_sum[1024]; 
     l_sum[get_local_id(0)] = all_sum;
     barrier(CLK_LOCAL_MEM_FENCE);
@@ -93,7 +93,7 @@ kernel void kernel_rms_norm(
 
     barrier(CLK_LOCAL_MEM_FENCE);
     
-#if defined(cl_khr_subgroups) && !defined(GGML_OPENCL_USE_ADRENO_KERNELS)
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     // broadcast
     for (uint i = get_local_size(0) / get_max_sub_group_size() / 2; i > 0; i /= 2) {
        if (get_local_id(0) < i) {
