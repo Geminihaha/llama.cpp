@@ -12,7 +12,7 @@
 
 ### A. 메모리 관리 (Unified Memory & SVM)
 *   **Shared Virtual Memory (SVM):** OpenCL 2.0의 SVM 기능을 활용하여 CPU와 GPU 간의 명시적 복사(`clEnqueueWriteBuffer`)를 제거합니다.
-*   **Host Pointer 활용:** `CL_MEM_USE_HOST_PTR`을 사용하여 Zero-copy 메커니즘을 구현, Adreno의 통합 메모리 아키텍처 이점을 활용합니다.
+*   **Host Pointer 활용:** `CL_MEM_ALLOC_HOST_PTR`을 사용하여 Zero-copy 메커니즘을 구현, Adreno의 통합 메모리 아키텍처 이점을 활용합니다.
 
 ### B. 데이터 레이아웃 및 하드웨어 가속
 *   **Image vs Buffer:** 행렬 연산(`matmul`) 시 Buffer 대신 `image2d_t` (Texture)를 활용하여 Adreno의 텍스처 프로세싱 유닛(TPU) 하드웨어 가속을 유도합니다.
@@ -30,23 +30,27 @@
 - [x] `sum_rows.cl`: Adreno 6xx용 로컬 메모리 Reduction 구현
 - [x] `cumsum.cl`: Adreno 6xx용 로컬 메모리 Prefix Sum (Scan) 구현
 - [x] `group_norm.cl`: Adreno 6xx용 로컬 메모리 Reduction 구현
+- [x] `mul_mv_q4_k_f32.cl`, `mul_mv_f16_f16.cl`, `mul_mv_q8_0_f32.cl`: FP16 연산 최적화
+- [x] `gemv_noshuffle_q4_k_f32.cl`: Adreno 전용 FP16/Texture (read_imageh) 최적화 적용
+- [x] `ggml-opencl.cpp`: Adreno 최적화 커널 활성화 임계값 하향 (512 -> 64)
 
 ## 4. 디버깅 및 테스트 로그
 
-### 문제 현상
+### [2026-04-16] 초기 안정화 및 FP16 최적화
+#### 문제 현상
 *   **증상:** OpenCL 커널 로딩 중 `[rms_norm]`, `[mean]`, `[sum_rows]`, `[cumsum]`, `[group_norm]` 단계에서 Segmentation Fault 발생.
-*   **원인:** Adreno 660 드라이버(OpenCL 2.0, Compiler E031.38.01.08)의 컴파일러가 Subgroup 확장 기능(`sub_group_reduce_add` 등) 및 전용 속성(`qcom_reqd_sub_group_size`)을 파싱하거나 최적화하는 과정에서 내부 오류로 크래시 발생.
+*   **원인:** Adreno 660 드라이버 컴파일러가 OpenCL 3.0용 Subgroup 확장 기능을 파싱하는 과정에서 크래시 발생.
 
-### 해결 방법
-1.  **호스트 코드 수정 (`ggml-opencl.cpp`):**
-    *   커널 컴파일 시 `-DGGML_OPENCL_USE_ADRENO_KERNELS` 매크로를 명시적으로 전달하여 커널 내부에서 Adreno 특화 분기 로직이 작동하도록 함.
-2.  **커널 코드 수정 (공통 전략):**
-    *   `__OPENCL_VERSION__ >= 300` 조건을 사용하여 OpenCL 3.0 이상을 지원하는 최신 Adreno(7xx, 8xx)에서는 고성능 Subgroup 기능을 유지함.
-    *   OpenCL 2.0 환경(Adreno 6xx 등)에서는 컴파일러 크래시를 방지하기 위해 `local memory` 기반의 Reduction/Scan 로직으로 우회 구현.
-    *   `qcom_reqd_sub_group_size` 속성이 컴파일러 파싱 에러를 유발하는 경우 조건부로 비활성화.
-3.  **수식 교정:**
-    *   `rms_norm.cl`에서 제곱 합 계산 시 누락되었던 제곱 연산을 추가하여 연산 정확도 확보.
+#### 해결 내역
+1.  **호스트 환경 개선:** `-DGGML_OPENCL_USE_ADRENO_KERNELS` 매크로를 커널 컴파일러 옵션에 명시적으로 추가.
+2.  **커널 안정화:** `__OPENCL_VERSION__` 기반 분기 로직을 도입하여 Adreno 6xx(OpenCL 2.0)에서는 Subgroup 기능 대신 안전한 `local memory` Reduction/Scan 로직을 사용하도록 수정.
+3.  **FP16 가속 적용:** 
+    *   `mul_mv` 계열 커널의 내부 연산을 `half` 타입으로 전환하여 하드웨어 가속 유도.
+    *   Adreno 전용 `gemv_noshuffle` 커널에 `read_imageh` (FP16 텍스처 읽기) 적용 및 연산 전체를 `half` 정밀도로 최적화.
+4.  **성능 범위 확대:** `use_adreno_kernels` 임계값을 64로 낮추어 소형 레이어에서도 Adreno 특화 커널이 작동하도록 조정.
+5.  **메모리 최적화 시도:** `CL_MEM_ALLOC_HOST_PTR`을 통한 Zero-copy 기반 마련 (불안정한 Map/Unmap 로직은 안정성을 위해 롤백 후 내부 최적화 유지).
 
-### 결과
-*   모든 OpenCL 커널이 정상적으로 로드됨.
-*   Adreno 660 GPU를 활용한 `llama-server` 및 추론 엔진 정상 동작 확인.
+#### 결과
+*   모든 커널 로딩 성공 및 Segfault 해결.
+*   응답 지연 시간(Latency) 개선 확인.
+*   Adreno 660 GPU 가속 엔진 정상 가동 확인.
