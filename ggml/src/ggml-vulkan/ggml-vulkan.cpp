@@ -5031,9 +5031,10 @@ static vk_device ggml_vk_get_device(size_t idx) {
         device->vendor_id = device->properties.vendorID;
         device->driver_id = driver_props.driverID;
 
-        if (device->driver_id == vk::DriverId::eMoltenvk) {
+        if (device->driver_id == vk::DriverId::eMoltenvk || device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
             // Disable external_memory_host until https://github.com/KhronosGroup/MoltenVK/pull/2622
             // is available in the Vulkan SDK.
+            // Also disable on Qualcomm Adreno because the driver is known to crash on import.
             device->external_memory_host = false;
         }
 
