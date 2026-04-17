@@ -19,11 +19,16 @@
 *   **해결:** `ggml-vulkan.cpp` 내에서 `VK_VENDOR_ID_QUALCOMM` 감지 시 해당 확장을 강제로 비활성화하도록 수정.
 *   **결과:** Adreno GPU에서 `-ngl` 옵션을 사용한 모델 로딩 및 초기화 성공.
 
+### B. 비동기 연산 및 UMA 구조 최적화
+*   **비동기 연산(Async) 비활성화:** Adreno 드라이버는 다중 큐(Multi-queue) 사용 시 레이스 컨디션으로 인한 크래시가 빈번함. Qualcomm 장치 감지 시 `support_async`를 강제로 `false`로 설정.
+*   **UMA(Unified Memory Architecture) 강제 적용:** Adreno GPU가 통합 메모리 구조임을 명시하여, 호스트 가시 메모리 활용도를 높이고 불필요한 메모리 복사 오버헤드를 방지함.
+
 ---
 
 ## 3. 구현 체크리스트
 - [x] `ggml-vulkan.cpp`: Qualcomm Vendor ID (`0x5143`) 감지 로직 추가
 - [x] `ggml-vulkan.cpp`: Adreno GPU에서 `external_memory_host` 확장 비활성화 패치 적용
+- [x] `ggml-vulkan.cpp`: Adreno GPU에서 비동기 연산 비활성화 및 UMA 강제 적용
 - [ ] `vulkan-shaders`: Adreno 6xx용 `subgroup` 연산 fallback (Shared Memory 활용) 구현
 - [ ] `ggml-vulkan.cpp`: Adreno 맞춤형 Local Work Size (LWS) 자동 튜닝 로직
 
