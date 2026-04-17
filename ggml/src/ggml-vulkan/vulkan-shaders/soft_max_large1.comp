@@ -25,7 +25,7 @@ void main() {
     // Find max
     FLOAT_TYPE max_val = p.has_sinks == 0 ? uintBitsToFloat(0xFF800000) : data_c[i02];
 
-    [[unroll]] for (uint col0 = wg_start, idx = 0; idx < num_iters; col0 += BLOCK_SIZE, ++idx) {
+     for (uint col0 = wg_start, idx = 0; idx < num_iters; col0 += BLOCK_SIZE, ++idx) {
         const uint col = col0 + tid;
 
         FLOAT_TYPE a = FLOAT_TYPE(0);
@@ -48,7 +48,7 @@ void main() {
     // reduce across the workgroup
     vals[tid] = max_val;
     barrier();
-    [[unroll]] for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+     for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
             vals[tid] = max(vals[tid], vals[tid + s]);
         }

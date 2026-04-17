@@ -18,7 +18,7 @@ void load_row_ids(uint expert_idx, bool nei0_is_pow2, uint ic) {
     for (uint j = 0; j < num_elements; j += BLOCK_SIZE) {
         // prefetch up to 16 elements
         if (iter == 0) {
-            [[unroll]] for (uint k = 0; k < 16; ++k) {
+             for (uint k = 0; k < 16; ++k) {
                 uint i = j + gl_LocalInvocationIndex + k*BLOCK_SIZE;
                 bool in_range = i < num_elements;
                 uint ii1;

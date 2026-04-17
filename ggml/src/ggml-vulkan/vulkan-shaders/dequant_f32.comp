@@ -14,7 +14,7 @@ void main() {
         return;
     }
 
-    [[unroll]] for (uint l = 0; l < 16; l++) {
+     for (uint l = 0; l < 16; l++) {
         data_b[i + l] = D_TYPE(data_a[i + l]);
     }
 }

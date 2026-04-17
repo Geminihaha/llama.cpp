@@ -29,7 +29,7 @@ void main() {
     // partial sums for thread in warp
     sum_yg[tid] = FLOAT_TYPE(0.0f);
 
-    [[unroll]] for (uint col = tid; col < p.KX; col += BLOCK_SIZE) {
+     for (uint col = tid; col < p.KX; col += BLOCK_SIZE) {
         const FLOAT_TYPE gi = FLOAT_TYPE(data_g[row*p.KX + col]);
         const FLOAT_TYPE yi = FLOAT_TYPE(data_y[row*p.KX + col]);
         sum_yg[tid] += yi * gi;
@@ -37,7 +37,7 @@ void main() {
 
     // sum up partial sums and write back result
     barrier();
-    [[unroll]] for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+     for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
             sum_yg[tid] += sum_yg[tid + s];
         }
@@ -46,7 +46,7 @@ void main() {
 
     const FLOAT_TYPE dot_yg = sum_yg[0];
 
-    [[unroll]] for (uint col = tid; col < p.KX; col += BLOCK_SIZE) {
+     for (uint col = tid; col < p.KX; col += BLOCK_SIZE) {
         data_d[row*p.KX + col] = D_TYPE(scale
             * (FLOAT_TYPE(data_g[row*p.KX + col]) - dot_yg)
             * FLOAT_TYPE(data_y[row*p.KX + col]));

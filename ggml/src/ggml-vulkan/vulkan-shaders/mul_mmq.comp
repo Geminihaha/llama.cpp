@@ -206,23 +206,23 @@ void main() {
 
     ACC_TYPE sums[WMITER * TM * WNITER * TN];
 
-    [[unroll]] for (uint i = 0; i < WMITER*TM*WNITER*TN; i++) {
+     for (uint i = 0; i < WMITER*TM*WNITER*TN; i++) {
         sums[i] = ACC_TYPE(0.0f);
     }
 
     for (uint block = start_k; block < end_k; block += BK * BK_STEP) {
-        [[unroll]] for (uint l = 0; loadc_a + l < BM; l += loadstride_a) {
+         for (uint l = 0; loadc_a + l < BM; l += loadstride_a) {
             const uint buf_ib = loadc_a + l;
             const uint ib = pos_a_ib + buf_ib * p.stride_a / BK;
             const uint iqs = loadr_a;
 
-            [[unroll]] for (uint k_step = 0; k_step < BK_STEP; k_step++) {
+             for (uint k_step = 0; k_step < BK_STEP; k_step++) {
                 if (block + k_step * BK < end_k) {
                     block_a_to_shmem(k_step * BM + buf_ib, ib + k_step, iqs);
                 }
             }
         }
-        [[unroll]] for (uint l = 0; loadc_b + l < BN; l += loadstride_b) {
+         for (uint l = 0; loadc_b + l < BN; l += loadstride_b) {
             const uint buf_ib = loadc_b + l;
 
 #ifdef MUL_MAT_ID
@@ -233,7 +233,7 @@ void main() {
 #endif
             const uint iqs = loadr_b;
 
-            [[unroll]] for (uint k_step = 0; k_step < BK_STEP; k_step++) {
+             for (uint k_step = 0; k_step < BK_STEP; k_step++) {
                 block_b_to_shmem(k_step * BN + buf_ib, ib + k_step, iqs, block + k_step * BK < end_k);
             }
         }
@@ -245,8 +245,8 @@ void main() {
 
         for (uint k_step = 0; k_step < BK_STEP; k_step++) {
             // Load from shared into cache
-            [[unroll]] for (uint wsir = 0; wsir < WMITER; wsir++) {
-                [[unroll]] for (uint cr = 0; cr < TM; cr++) {
+             for (uint wsir = 0; wsir < WMITER; wsir++) {
+                 for (uint cr = 0; cr < TM; cr++) {
                     const uint reg_ib = wsir * TM + cr;
                     const uint buf_ib = warp_r * WM + wsir * WSUBM + tiwr * TM + cr;
 
@@ -254,13 +254,13 @@ void main() {
                 }
             }
 
-            [[unroll]] for (uint wsic = 0; wsic < WNITER; wsic++) {
-                [[unroll]] for (uint cc = 0; cc < TN; cc++) {
+             for (uint wsic = 0; wsic < WNITER; wsic++) {
+                 for (uint cc = 0; cc < TN; cc++) {
                     const uint ib = k_step * BN + warp_c * WN + wsic * WSUBN + tiwc * TN + cc;
                     block_b_to_registers(ib);
 
-                    [[unroll]] for (uint wsir = 0; wsir < WMITER; wsir++) {
-                        [[unroll]] for (uint cr = 0; cr < TM; cr++) {
+                     for (uint wsir = 0; wsir < WMITER; wsir++) {
+                         for (uint cr = 0; cr < TM; cr++) {
                             const uint cache_a_idx = wsir * TM + cr;
                             const uint sums_idx = (wsic * TN + cc) * (WMITER * TM) + wsir * TM + cr;
 
@@ -281,19 +281,19 @@ void main() {
     const uint offsets = batch_idx * p.batch_stride_d + ik * p.batch_stride_d * p.num_batches;
 #endif
 
-    [[unroll]] for (uint wsic = 0; wsic < WNITER; wsic++) {
-        [[unroll]] for (uint wsir = 0; wsir < WMITER; wsir++) {
+     for (uint wsic = 0; wsic < WNITER; wsic++) {
+         for (uint wsir = 0; wsir < WMITER; wsir++) {
 
             const uint dr_warp = dr + wsir * WSUBM + tiwr * TM;
             const uint dc_warp = dc + wsic * WSUBN + tiwc * TN;
-            [[unroll]] for (uint cc = 0; cc < TN; cc++) {
+             for (uint cc = 0; cc < TN; cc++) {
 #ifdef MUL_MAT_ID
                 const uint row_i = dc_warp + cc;
                 if (row_i >= _ne1) break;
 
                 const u16vec2 row_idx = row_ids[row_i - ic * BN];
 #endif // MUL_MAT_ID
-                [[unroll]] for (uint cr = 0; cr < TM; cr++) {
+                 for (uint cr = 0; cr < TM; cr++) {
                     const uint sums_idx = (wsic * TN + cc) * WMITER * TM + wsir * TM + cr;
 #ifdef MUL_MAT_ID
                     if (dr_warp + cr < p.M) {

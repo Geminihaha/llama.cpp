@@ -467,7 +467,7 @@ FLOAT_TYPE mmvq_dot_product(const uint ib_a, const uint iqs) {
 
     float sum = 0;
     const uint sc = data_a[ib_k].scales[ib64];
-    [[unroll]] for (int l = 0; l < 4; ++l) {
+     for (int l = 0; l < 4; ++l) {
         const uint ib16 = 2 * ib32 + l / 2;
         const float dl = d * (2 * bitfieldExtract(sc, 3 * int(ib16 & 3), 3) + 1);
         const uint qh = qh16 >> (4 * l);

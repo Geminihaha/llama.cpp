@@ -25,7 +25,7 @@ void main() {
     sum_xx[tid] = FLOAT_TYPE(0.0f);
     sum_xg[tid] = FLOAT_TYPE(0.0f);
 
-    [[unroll]] for (uint col = tid; col < p.KX; col += BLOCK_SIZE) {
+     for (uint col = tid; col < p.KX; col += BLOCK_SIZE) {
         const FLOAT_TYPE gi = FLOAT_TYPE(data_a[row*p.KX + col]);
         const FLOAT_TYPE xi = FLOAT_TYPE(data_b[row*p.KX + col]);
         sum_xx[tid] += xi * xi;
@@ -34,7 +34,7 @@ void main() {
 
     // sum up partial sums and write back result
     barrier();
-    [[unroll]] for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+     for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
             sum_xx[tid] += sum_xx[tid + s];
             sum_xg[tid] += sum_xg[tid + s];
@@ -47,7 +47,7 @@ void main() {
     const FLOAT_TYPE scale_g = inversesqrt(mean + eps);
     const FLOAT_TYPE scale_x = -scale_g * sum_xg[0] / (sum_xx[0] + FLOAT_TYPE(p.KX) * eps);
 
-    [[unroll]] for (uint col = tid; col < p.KX; col += BLOCK_SIZE) {
+     for (uint col = tid; col < p.KX; col += BLOCK_SIZE) {
         data_d[row*p.KX + col] = D_TYPE(
             scale_g * FLOAT_TYPE(data_a[row*p.KX + col]) +
             scale_x * FLOAT_TYPE(data_b[row*p.KX + col]));

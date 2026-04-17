@@ -14,7 +14,7 @@ void calc_superblock(const uint a_offset, const uint b_offset, const uint itid, 
     uint ibi = a_offset + first_row * num_blocks_per_row + i;
     // Precompute db multiplication factors
     float db_vals[NUM_ROWS];
-    [[unroll]] for (uint n = 0; n < num_rows; ++n) {
+     for (uint n = 0; n < num_rows; ++n) {
         const float d = float(data_a[ibi].d);
         const uint scale_raw = data_a[ibi].scales[ib32];
         const uint scale = (scale_raw >> nibble_shift) & 0xF;
@@ -23,11 +23,11 @@ void calc_superblock(const uint a_offset, const uint b_offset, const uint itid, 
         ibi += num_blocks_per_row;
     }
     ibi = a_offset + first_row * num_blocks_per_row + i;
-    [[unroll]] for (uint n = 0; n < num_rows; ++n) {
+     for (uint n = 0; n < num_rows; ++n) {
         // Preload grid and sign data for all l values
         vec4 grid0_vals[2], grid1_vals[2];
         uint sign_vals[2], sign7_vals[2];
-        [[unroll]] for (uint l = 0; l < 2; ++l) {
+         for (uint l = 0; l < 2; ++l) {
             const uint qs = data_a[ibi].qs[2 * itid + l];
             sign_vals[l] = qs >> 9;
             sign7_vals[l] = bitCount(sign_vals[l]);
@@ -36,9 +36,9 @@ void calc_superblock(const uint a_offset, const uint b_offset, const uint itid, 
             grid1_vals[l] = vec4(unpack8(grid_data.y));
         }
         // Preload B data for all j columns (reduce repeated index calculations)
-        [[unroll]] for (uint j = 0; j < NUM_COLS; ++j) {
+         for (uint j = 0; j < NUM_COLS; ++j) {
             FLOAT_TYPE sum = FLOAT_TYPE(0.0);
-            [[unroll]] for (uint l = 0; l < 2; ++l) {
+             for (uint l = 0; l < 2; ++l) {
                 const uint sign = sign_vals[l];
                 const uint sign7 = sign7_vals[l];
                 const vec4 grid0 = grid0_vals[l];
@@ -76,13 +76,13 @@ void compute_outputs(const uint32_t first_row, const uint32_t num_rows) {
     const uint itid = tid % 16;  // 0...15
     const uint ix = tid / 16;
 
-    [[unroll]] for (uint j = 0; j < NUM_COLS; ++j) {
-        [[unroll]] for (uint i = 0; i < NUM_ROWS; ++i) {
+     for (uint j = 0; j < NUM_COLS; ++j) {
+         for (uint i = 0; i < NUM_ROWS; ++i) {
             temp[j][i] = FLOAT_TYPE(0);
         }
     }
 
-    [[unroll]] for (uint i = ix; i < num_blocks_per_row; i += blocks_per_wg)
+     for (uint i = ix; i < num_blocks_per_row; i += blocks_per_wg)
         calc_superblock(a_offset, b_offset, itid, i, num_blocks_per_row, first_row, num_rows);
 
     reduce_result(temp, d_offset, first_row, num_rows, tid);

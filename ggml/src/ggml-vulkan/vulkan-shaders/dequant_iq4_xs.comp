@@ -27,7 +27,7 @@ void main() {
 
     const uint b_idx = 256 * ib + 32 * ib32;
     const uint q_idx = 16 * ib32;
-    [[unroll]] for (uint l = 0; l < 16; ++l) {
+     for (uint l = 0; l < 16; ++l) {
         data_b[b_idx + l +  0] = D_TYPE(dl * kvalues_iq4nl[data_a[ib].qs[q_idx + l] & 0xF]);
         data_b[b_idx + l + 16] = D_TYPE(dl * kvalues_iq4nl[data_a[ib].qs[q_idx + l] >>  4]);
     }

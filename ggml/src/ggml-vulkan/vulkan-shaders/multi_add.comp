@@ -152,7 +152,7 @@ void main() {
 
     FLOAT_TYPE sum_sq = 0;
 
-    [[unroll]] for (uint i = 0; i < num_iter; ++i) {
+     for (uint i = 0; i < num_iter; ++i) {
         if (idx >= ne) {
             continue;
         }
@@ -160,7 +160,7 @@ void main() {
         get_indices(idx, i00, i01, i02, i03, p.ne20, p.ne21, p.ne22, p.ne23);
 
         FLOAT_TYPE sum = FLOAT_TYPE(0);
-        [[unroll]] for (uint s = 0; s < num_srcs; ++s) {
+         for (uint s = 0; s < num_srcs; ++s) {
             sum += load_a(s, src_idx(s, i00, i01, i02, i03));
         }
         sum_sq += sum*sum;
@@ -178,7 +178,7 @@ void main() {
             sumsh[gl_SubgroupID] = sum_sq;
         }
         barrier();
-        [[unroll]] for (uint s = NumSubgroups / 2; s > 0; s >>= 1) {
+         for (uint s = NumSubgroups / 2; s > 0; s >>= 1) {
             if (gl_SubgroupID < s && gl_SubgroupInvocationID == 0) {
                 sum_sq += sumsh[gl_SubgroupID + s];
                 sumsh[gl_SubgroupID] = sum_sq;

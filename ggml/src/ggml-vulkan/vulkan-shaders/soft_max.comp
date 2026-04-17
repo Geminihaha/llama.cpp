@@ -75,7 +75,7 @@ void soft_max(uint num_iters) {
     const uint DATA_CACHE_SIZE = 16;
     FLOAT_TYPE data_cache[DATA_CACHE_SIZE];
 
-    [[unroll]] for (uint col0 = 0, idx = 0; idx < num_iters; col0 += BLOCK_SIZE, ++idx) {
+     for (uint col0 = 0, idx = 0; idx < num_iters; col0 += BLOCK_SIZE, ++idx) {
         const uint col = col0 + tid;
 
         FLOAT_TYPE a = FLOAT_TYPE(0);
@@ -102,7 +102,7 @@ void soft_max(uint num_iters) {
     // reduce across the workgroup
     vals[tid] = max_val;
     barrier();
-    [[unroll]] for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+     for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
             vals[tid] = max(vals[tid], vals[tid + s]);
         }
@@ -115,7 +115,7 @@ void soft_max(uint num_iters) {
     FLOAT_TYPE sum = FLOAT_TYPE(0.0f);
 
     // Compute sum{exp(x - max)}
-    [[unroll]] for (uint col0 = 0, idx = 0; idx < num_iters; col0 += BLOCK_SIZE, ++idx) {
+     for (uint col0 = 0, idx = 0; idx < num_iters; col0 += BLOCK_SIZE, ++idx) {
         const uint col = col0 + tid;
 
         if (col >= p.KX) {
@@ -142,7 +142,7 @@ void soft_max(uint num_iters) {
     // reduce across the workgroup
     vals[tid] = sum;
     barrier();
-    [[unroll]] for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+     for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
             vals[tid] += vals[tid + s];
         }
@@ -156,7 +156,7 @@ void soft_max(uint num_iters) {
 
     FLOAT_TYPE rcpdivisor = 1.0/sum;
 
-    [[unroll]] for (uint col0 = 0, idx = 0; idx < num_iters; col0 += BLOCK_SIZE, ++idx) {
+     for (uint col0 = 0, idx = 0; idx < num_iters; col0 += BLOCK_SIZE, ++idx) {
         const uint col = col0 + tid;
 
         if (col >= p.KX) {

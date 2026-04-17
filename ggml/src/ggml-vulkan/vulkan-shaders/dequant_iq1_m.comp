@@ -28,14 +28,14 @@ void main() {
     const float d = float(unpackHalf2x16(s.x | (s.y << 4) | (s.z << 8) | (s.w << 12)).x);
 
     const uint sc = data_a[ib].scales[ib64];
-    [[unroll]] for (int l = 0; l < 4; ++l) {
+     for (int l = 0; l < 4; ++l) {
         const uint ib16 = 2 * ib32 + l / 2;
         const float dl = d * (2 * bitfieldExtract(sc, 3 * int(ib16 & 3), 3) + 1);
         const uint qh = data_a[ib].qh[ib16] >> (4 * (l & 1));
         const uint qs = data_a[ib].qs[4 * ib32 + l];
         const float delta = ((qh & 8) != 0) ? -IQ1M_DELTA : IQ1M_DELTA;
         const int16_t grid = int16_t(iq1s_grid[qs | ((qh & 7) << 8)]);
-        [[unroll]] for (int j = 0; j < 8; ++j) {
+         for (int j = 0; j < 8; ++j) {
             data_b[b_idx + 8 * l + j] = D_TYPE(dl * (bitfieldExtract(grid, 2*j, 2) + delta));
         }
     }

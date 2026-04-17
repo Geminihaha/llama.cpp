@@ -251,7 +251,7 @@ void store_scalesQ4_K(uint tid)
     uint is_start = is_per_tid * (tid % tids_per_row);
     uint tid_row = tid / tids_per_row;
 
-    [[unroll]] for (uint idx = 0; idx < is_per_tid; ++idx) {
+     for (uint idx = 0; idx < is_per_tid; ++idx) {
         uint is = idx + is_start;
         uvec4 v = row_v;
         const vec2 loadd = vec2(unpackFloat2x16(v.x));

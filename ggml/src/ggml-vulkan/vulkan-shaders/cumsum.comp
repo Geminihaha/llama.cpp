@@ -44,7 +44,7 @@ void main() {
     for (int i = 0; i < num_iter; ++i) {
         FLOAT_TYPE v[ELEM_PER_THREAD];
         FLOAT_TYPE thread_sum = 0;
-        [[unroll]] for (uint j = 0; j < ELEM_PER_THREAD; ++j) {
+         for (uint j = 0; j < ELEM_PER_THREAD; ++j) {
             if (col + j < p.n_cols) {
                 thread_sum += FLOAT_TYPE(data_a[src_idx + col + j]);
             }
@@ -52,7 +52,7 @@ void main() {
         }
 
         thread_sum = subgroupExclusiveAdd(thread_sum);
-        [[unroll]] for (uint j = 0; j < ELEM_PER_THREAD; ++j) {
+         for (uint j = 0; j < ELEM_PER_THREAD; ++j) {
             v[j] += thread_sum;
         }
         // Store the largest partial sum for each subgroup, then add the partials for all
@@ -62,18 +62,18 @@ void main() {
         }
         barrier();
         for (int s = 0; s < subgroup_id; ++s) {
-            [[unroll]] for (uint j = 0; j < ELEM_PER_THREAD; ++j) {
+             for (uint j = 0; j < ELEM_PER_THREAD; ++j) {
                 v[j] += partial[s];
             }
         }
-        [[unroll]] for (uint j = 0; j < ELEM_PER_THREAD; ++j) {
+         for (uint j = 0; j < ELEM_PER_THREAD; ++j) {
             v[j] += last_sum;
         }
         barrier();
         if (tid == BLOCK_SIZE - 1) {
             last_sum = v[ELEM_PER_THREAD - 1];
         }
-        [[unroll]] for (uint j = 0; j < ELEM_PER_THREAD; ++j) {
+         for (uint j = 0; j < ELEM_PER_THREAD; ++j) {
             if (col + j < p.n_cols) {
                 data_d[dst_idx + col + j] = D_TYPE(v[j]);
             }

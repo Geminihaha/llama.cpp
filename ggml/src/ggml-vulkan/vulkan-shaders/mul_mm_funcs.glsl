@@ -297,7 +297,7 @@ void load_a_to_shmem(const uint pos_a, const uint row, const uint col, const uin
             const float delta = ((qh & 0x8000) != 0) ? -IQ1S_DELTA : IQ1S_DELTA;
             const int16_t grid = int16_t(iq1s_grid[qs | (bitfieldExtract(qh, 3 * int(ib8 & 3), 3) << 8)]);
 
-            [[unroll]] for (int k = 0; k < 4; ++k) {
+             for (int k = 0; k < 4; ++k) {
                 buf_a[buf_idx + k] = FLOAT_TYPEV2(dl * (bitfieldExtract(grid, 4 * k    , 2) + delta),
                                                   dl * (bitfieldExtract(grid, 4 * k + 2, 2) + delta));
             }
@@ -319,7 +319,7 @@ void load_a_to_shmem(const uint pos_a, const uint row, const uint col, const uin
             const float delta = ((qh & 8) != 0) ? -IQ1M_DELTA : IQ1M_DELTA;
             const int16_t grid = int16_t(iq1s_grid[qs | ((qh & 7) << 8)]);
 
-            [[unroll]] for (int k = 0; k < 4; ++k) {
+             for (int k = 0; k < 4; ++k) {
                 buf_a[buf_idx + k] = FLOAT_TYPEV2(dl * (bitfieldExtract(grid, 4 * k    , 2) + delta),
                                                   dl * (bitfieldExtract(grid, 4 * k + 2, 2) + delta));
             }

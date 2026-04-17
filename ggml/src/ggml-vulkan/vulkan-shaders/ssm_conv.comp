@@ -40,7 +40,7 @@ void main() {
             vec4(src1[src1_base], src1[src1_base + 1], src1[src1_base + 2], src1[src1_base + 3])
         );
     } else {
-        [[unroll]] for (uint i0 = 0; i0 < nc; i0++) {
+         for (uint i0 = 0; i0 < nc; i0++) {
             sum += src0[src0_base + i0] * src1[src1_base + i0];
         }
     }

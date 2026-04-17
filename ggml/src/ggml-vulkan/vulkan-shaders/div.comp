@@ -13,7 +13,7 @@ void main() {
     // num_threads * num_iter must equal 512, to match the wg_denoms and get_idx calculation
     const uint num_iter = 2;
 
-    [[unroll]] for (uint i = 0; i < num_iter; ++i) {
+     for (uint i = 0; i < num_iter; ++i) {
         if (idx >= p.ne) {
             continue;
         }

@@ -38,7 +38,7 @@ void main() {
 
     vals[tid] = count;
     barrier();
-    [[unroll]] for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+     for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
             vals[tid] += vals[tid + s];
         }

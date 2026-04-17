@@ -23,7 +23,7 @@ void main() {
     const float d = float(data_a[ib].d);
     const uint bits = uint(data_a[ib].qs[il]);
 
-    [[unroll]] for (uint l = 0; l < 8; ++l) {
+     for (uint l = 0; l < 8; ++l) {
         data_b[b_idx + l] = D_TYPE((bits & (1u << l)) != 0u ? d : -d);
     }
 }

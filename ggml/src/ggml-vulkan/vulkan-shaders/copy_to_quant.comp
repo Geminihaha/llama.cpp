@@ -34,7 +34,7 @@ void quantize(uint dst_idx, uint src_idx)
     float amax = 0.0;
     float vmax = 0.0;
 
-    [[unroll]] for (int j = 0; j < QUANT_K_Q4_0; ++j) {
+     for (int j = 0; j < QUANT_K_Q4_0; ++j) {
         const float v = data_s[src_idx + j];
         if (amax < abs(v)) {
             amax = abs(v);
@@ -47,7 +47,7 @@ void quantize(uint dst_idx, uint src_idx)
 
     data_q[dst_idx].d = float16_t(d);
 
-    [[unroll]] for (int j = 0; j < QUANT_K_Q4_0/2; ++j) {
+     for (int j = 0; j < QUANT_K_Q4_0/2; ++j) {
         const float x0 = data_s[src_idx + 0              + j]*id;
         const float x1 = data_s[src_idx + QUANT_K_Q4_0/2 + j]*id;
 
@@ -65,7 +65,7 @@ void quantize(uint dst_idx, uint src_idx)
     float vmin = 1.0/0.0;
     float vmax = -vmin;
 
-    [[unroll]] for (int j = 0; j < QUANT_K_Q4_1; ++j) {
+     for (int j = 0; j < QUANT_K_Q4_1; ++j) {
         const float v = data_s[src_idx + j];
 
         if (v < vmin) vmin = v;
@@ -78,7 +78,7 @@ void quantize(uint dst_idx, uint src_idx)
     data_q[dst_idx].d = float16_t(d);
     data_q[dst_idx].m = float16_t(vmin);
 
-    [[unroll]] for (int j = 0; j < QUANT_K_Q4_1/2; ++j) {
+     for (int j = 0; j < QUANT_K_Q4_1/2; ++j) {
         const float x0 = (data_s[src_idx + 0              + j] - vmin)*id;
         const float x1 = (data_s[src_idx + QUANT_K_Q4_1/2 + j] - vmin)*id;
 
@@ -96,7 +96,7 @@ void quantize(uint dst_idx, uint src_idx)
     float amax = 0.0;
     float vmax = 0.0;
 
-    [[unroll]] for (int j = 0; j < QUANT_K_Q5_0; ++j) {
+     for (int j = 0; j < QUANT_K_Q5_0; ++j) {
         const float v = data_s[src_idx + j];
         if (amax < abs(v)) {
             amax = abs(v);
@@ -110,7 +110,7 @@ void quantize(uint dst_idx, uint src_idx)
     data_q[dst_idx].d = float16_t(d);
 
     uint32_t qh = 0;
-    [[unroll]] for (int j = 0; j < QUANT_K_Q5_0/2; ++j) {
+     for (int j = 0; j < QUANT_K_Q5_0/2; ++j) {
         const float x0 = data_s[src_idx + 0              + j]*id;
         const float x1 = data_s[src_idx + QUANT_K_Q5_0/2 + j]*id;
 
@@ -132,7 +132,7 @@ void quantize(uint dst_idx, uint src_idx)
     float min = data_s[src_idx + 0];
     float max = min;
 
-    [[unroll]] for (int j = 1; j < QUANT_K_Q5_1; ++j) {
+     for (int j = 1; j < QUANT_K_Q5_1; ++j) {
         const float v = data_s[src_idx + j];
         min = v < min ? v : min;
         max = v > max ? v : max;
@@ -145,7 +145,7 @@ void quantize(uint dst_idx, uint src_idx)
     data_q[dst_idx].m = float16_t(min);
 
     uint32_t qh = 0;
-    [[unroll]] for (int j = 0; j < QUANT_K_Q5_1/2; ++j) {
+     for (int j = 0; j < QUANT_K_Q5_1/2; ++j) {
         const float x0 = (data_s[src_idx + 0              + j] - min)*id;
         const float x1 = (data_s[src_idx + QUANT_K_Q5_1/2 + j] - min)*id;
 
@@ -165,7 +165,7 @@ void quantize(uint dst_idx, uint src_idx)
 {
     float amax = 0.0; // absolute max
 
-    [[unroll]] for (int j = 0; j < QUANT_K_Q8_0; j++) {
+     for (int j = 0; j < QUANT_K_Q8_0; j++) {
         const float v = data_s[src_idx + j];
         amax = max(amax, abs(v));
     }
@@ -175,7 +175,7 @@ void quantize(uint dst_idx, uint src_idx)
 
     data_q[dst_idx].d = float16_t(d);
 
-    [[unroll]] for (int j = 0; j < QUANT_K_Q8_0; ++j) {
+     for (int j = 0; j < QUANT_K_Q8_0; ++j) {
         const float x0 = data_s[src_idx + j]*id;
 
         data_q[dst_idx].qs[j] = int8_t(round(x0));
@@ -188,7 +188,7 @@ void quantize(uint dst_idx, uint src_idx)
 {
     float sum_abs = 0.0;
 
-    [[unroll]] for (int j = 0; j < QUANT_K_Q1_0; j++) {
+     for (int j = 0; j < QUANT_K_Q1_0; j++) {
         sum_abs += abs(data_s[src_idx + j]);
     }
 
@@ -196,11 +196,11 @@ void quantize(uint dst_idx, uint src_idx)
 
     data_q[dst_idx].d = float16_t(d);
 
-    [[unroll]] for (int j = 0; j < QUANT_K_Q1_0 / 8; ++j) {
+     for (int j = 0; j < QUANT_K_Q1_0 / 8; ++j) {
         data_q[dst_idx].qs[j] = uint8_t(0);
     }
 
-    [[unroll]] for (int j = 0; j < QUANT_K_Q1_0; ++j) {
+     for (int j = 0; j < QUANT_K_Q1_0; ++j) {
         if (data_s[src_idx + j] >= 0.0) {
             data_q[dst_idx].qs[j / 8] |= uint8_t(1 << (j % 8));
         }
@@ -225,7 +225,7 @@ void quantize(uint dst_idx, uint src_idx)
     float amax = 0.0;
     float vmax = 0.0;
 
-    [[unroll]] for (int j = 0; j < QUANT_K_IQ4_NL; ++j) {
+     for (int j = 0; j < QUANT_K_IQ4_NL; ++j) {
         const float v = data_s[src_idx + j];
         if (amax < abs(v)) {
             amax = abs(v);
@@ -237,7 +237,7 @@ void quantize(uint dst_idx, uint src_idx)
     const float id = (d != 0.0) ? 1.0/d : 0.0;
 
     float sumqx = 0, sumq2 = 0;
-    [[unroll]] for (int j = 0; j < QUANT_K_IQ4_NL/2; ++j) {
+     for (int j = 0; j < QUANT_K_IQ4_NL/2; ++j) {
         const float x0 = data_s[src_idx + 0                + j]*id;
         const float x1 = data_s[src_idx + QUANT_K_IQ4_NL/2 + j]*id;
         const uint xi0 = best_index(x0);

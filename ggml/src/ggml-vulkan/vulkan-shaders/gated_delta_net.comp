@@ -49,7 +49,7 @@ FLOAT_TYPE reduce_add_shmem(FLOAT_TYPE partial) {
     const uint lane = gl_SubgroupInvocationID;
     temp[lane] = partial;
     barrier();
-    [[unroll]] for (uint s = LANES_PER_COLUMN / 2u; s > 0; s >>= 1u) {
+     for (uint s = LANES_PER_COLUMN / 2u; s > 0; s >>= 1u) {
         FLOAT_TYPE other = temp[lane ^ s];
         barrier();
         temp[lane] += other;
@@ -104,7 +104,7 @@ void main() {
     const uint state_base = (seq_id * H + head_id) * state_size;
 
     FLOAT_TYPE s_shard[ROWS_PER_LANE];
-    [[unroll]] for (uint r = 0; r < ROWS_PER_LANE; r++) {
+     for (uint r = 0; r < ROWS_PER_LANE; r++) {
         s_shard[r] = FLOAT_TYPE(data_state[state_base + col * S_V + r * LANES_PER_COLUMN + lane]);
     }
 
@@ -119,7 +119,7 @@ void main() {
 
         FLOAT_TYPE k_reg[ROWS_PER_LANE];
         FLOAT_TYPE q_reg[ROWS_PER_LANE];
-        [[unroll]] for (uint r = 0; r < ROWS_PER_LANE; r++) {
+         for (uint r = 0; r < ROWS_PER_LANE; r++) {
             const uint i = r * LANES_PER_COLUMN + lane;
             k_reg[r] = FLOAT_TYPE(data_k[k_off + i]);
             q_reg[r] = FLOAT_TYPE(data_q[q_off + i]);
@@ -128,12 +128,12 @@ void main() {
         FLOAT_TYPE g_exp[ROWS_PER_LANE];
         if (KDA == 0) {
             const FLOAT_TYPE g_val = exp(FLOAT_TYPE(data_g[gb_off]));
-            [[unroll]] for (uint r = 0; r < ROWS_PER_LANE; r++) {
+             for (uint r = 0; r < ROWS_PER_LANE; r++) {
                 g_exp[r] = g_val;
             }
         } else {
             const uint g_base = gb_off * S_V;
-            [[unroll]] for (uint r = 0; r < ROWS_PER_LANE; r++) {
+             for (uint r = 0; r < ROWS_PER_LANE; r++) {
                 const uint i = r * LANES_PER_COLUMN + lane;
                 g_exp[r] = exp(FLOAT_TYPE(data_g[g_base + i]));
             }
@@ -142,7 +142,7 @@ void main() {
         const FLOAT_TYPE v_val = FLOAT_TYPE(data_v[v_off + col]);
 
         FLOAT_TYPE kv_shard = 0.0;
-        [[unroll]] for (uint r = 0; r < ROWS_PER_LANE; r++) {
+         for (uint r = 0; r < ROWS_PER_LANE; r++) {
             kv_shard += g_exp[r] * s_shard[r] * k_reg[r];
         }
         FLOAT_TYPE kv_col = reduce_partial(kv_shard);
@@ -150,7 +150,7 @@ void main() {
         FLOAT_TYPE delta_col = (v_val - kv_col) * beta_val;
 
         FLOAT_TYPE attn_partial = 0.0;
-        [[unroll]] for (uint r = 0; r < ROWS_PER_LANE; r++) {
+         for (uint r = 0; r < ROWS_PER_LANE; r++) {
             s_shard[r] = g_exp[r] * s_shard[r] + k_reg[r] * delta_col;
             attn_partial += s_shard[r] * q_reg[r];
         }
@@ -163,7 +163,7 @@ void main() {
         attn_off += S_V * H;
     }
 
-    [[unroll]] for (uint r = 0; r < ROWS_PER_LANE; r++) {
+     for (uint r = 0; r < ROWS_PER_LANE; r++) {
         data_dst[s_off + state_base + col * S_V + r * LANES_PER_COLUMN + lane] = s_shard[r];
     }
 }

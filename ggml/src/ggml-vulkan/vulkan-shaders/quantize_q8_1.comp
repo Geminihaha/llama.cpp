@@ -65,7 +65,7 @@ void quantize(const uint wgid) {
 #ifndef USE_SUBGROUPS
     shmem[tid] = thread_max;
     barrier();
-    [[unroll]] for (uint s = 4; s > 0; s >>= 1) {
+     for (uint s = 4; s > 0; s >>= 1) {
         if (iqs < s) {
             shmem[tid] = max(shmem[tid], shmem[tid + s]);
         }
@@ -96,7 +96,7 @@ void quantize(const uint wgid) {
 #ifndef USE_SUBGROUPS
     shmem[tid] = thread_sum;
     barrier();
-    [[unroll]] for (uint s = 4; s > 0; s >>= 1) {
+     for (uint s = 4; s > 0; s >>= 1) {
         if (iqs < s) {
             shmem[tid] += shmem[tid + s];
         }

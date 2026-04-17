@@ -26,7 +26,7 @@ void main() {
 
     // We must produce 32 values using 4 sign bytes, 1 qh byte, 8 qs bytes.
     uint qh = data_a[ib].qh[is];
-    [[unroll]] for (uint l = 0; l < 8; ++l) {
+     for (uint l = 0; l < 8; ++l) {
         const uint iqs = 8 * is + l;
         const uint qs = data_a[ib].qs[iqs];
         const uint gidx = qs | ((qh << (8 - l)) & 256);

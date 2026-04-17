@@ -865,7 +865,7 @@ shared uint32_t iq1s_grid_gpu[2048];
 void init_iq_shmem(uvec3 wgsize)
 {
     // copy the table into shared memory and sync
-    [[unroll]] for (uint i = 0; i < iq1s_grid_const.length(); i += wgsize.x) {
+     for (uint i = 0; i < iq1s_grid_const.length(); i += wgsize.x) {
         uint idx = i + gl_LocalInvocationIndex.x;
         if (iq1s_grid_const.length() % wgsize.x == 0 || idx < iq1s_grid_const.length()) {
             u16vec2 g = unpack16(iq1s_grid_const[idx]);
@@ -873,7 +873,7 @@ void init_iq_shmem(uvec3 wgsize)
             iq1s_grid[2*idx+1] = g.y;
         }
     }
-    [[unroll]] for (uint i = 0; i < iq1s_grid_gpu_const.length(); i += wgsize.x) {
+     for (uint i = 0; i < iq1s_grid_gpu_const.length(); i += wgsize.x) {
         uint idx = i + gl_LocalInvocationIndex.x;
         if (iq1s_grid_gpu_const.length() % wgsize.x == 0 || idx < iq1s_grid_gpu_const.length()) {
             iq1s_grid_gpu[idx] = iq1s_grid_gpu_const[idx];
@@ -973,7 +973,7 @@ shared uvec2 iq2xxs_grid[256];
 void init_iq_shmem(uvec3 wgsize)
 {
     // copy the table into shared memory and sync
-    [[unroll]] for (uint i = 0; i < iq2xxs_grid.length(); i += wgsize.x) {
+     for (uint i = 0; i < iq2xxs_grid.length(); i += wgsize.x) {
         if (iq2xxs_grid_const.length() % wgsize.x == 0 || i + gl_LocalInvocationIndex.x < iq2xxs_grid_const.length()) {
             iq2xxs_grid[i + gl_LocalInvocationIndex.x] = iq2xxs_grid_const[i + gl_LocalInvocationIndex.x];
         }
@@ -1143,7 +1143,7 @@ shared uvec2 iq2xs_grid[512];
 void init_iq_shmem(uvec3 wgsize)
 {
     // copy the table into shared memory and sync
-    [[unroll]] for (uint i = 0; i < iq2xs_grid.length(); i += wgsize.x) {
+     for (uint i = 0; i < iq2xs_grid.length(); i += wgsize.x) {
         if (iq2xs_grid.length() % wgsize.x == 0 || i + gl_LocalInvocationIndex.x < iq2xs_grid_const.length()) {
             iq2xs_grid[i + gl_LocalInvocationIndex.x] = iq2xs_grid_const[i + gl_LocalInvocationIndex.x];
         }
@@ -1443,7 +1443,7 @@ shared uvec2 iq2s_grid[1024];
 void init_iq_shmem(uvec3 wgsize)
 {
     // copy the table into shared memory and sync
-    [[unroll]] for (uint i = 0; i < iq2s_grid.length(); i += wgsize.x) {
+     for (uint i = 0; i < iq2s_grid.length(); i += wgsize.x) {
         if (iq2s_grid.length() % wgsize.x == 0 || i + gl_LocalInvocationIndex.x < iq2s_grid_const.length()) {
             iq2s_grid[i + gl_LocalInvocationIndex.x] = iq2s_grid_const[i + gl_LocalInvocationIndex.x];
         }
@@ -1515,7 +1515,7 @@ shared uint32_t iq3xxs_grid[256];
 void init_iq_shmem(uvec3 wgsize)
 {
     // copy the table into shared memory and sync
-    [[unroll]] for (uint i = 0; i < iq3xxs_grid.length(); i += wgsize.x) {
+     for (uint i = 0; i < iq3xxs_grid.length(); i += wgsize.x) {
         if (iq3xxs_grid.length() % wgsize.x == 0 || i + gl_LocalInvocationIndex.x < iq3xxs_grid.length()) {
             iq3xxs_grid[i + gl_LocalInvocationIndex.x] = iq3xxs_grid_const[i + gl_LocalInvocationIndex.x];
         }
@@ -1625,7 +1625,7 @@ shared uint32_t iq3s_grid[512];
 void init_iq_shmem(uvec3 wgsize)
 {
     // copy the table into shared memory and sync
-    [[unroll]] for (uint i = 0; i < iq3s_grid.length(); i += wgsize.x) {
+     for (uint i = 0; i < iq3s_grid.length(); i += wgsize.x) {
         if (iq3s_grid.length() % wgsize.x == 0 || i + gl_LocalInvocationIndex.x < iq3s_grid.length()) {
             iq3s_grid[i + gl_LocalInvocationIndex.x] = iq3s_grid_const[i + gl_LocalInvocationIndex.x];
         }

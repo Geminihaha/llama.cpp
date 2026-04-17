@@ -28,7 +28,7 @@ vec2 cache_b_ds;
 #include "mul_mat_vecq_funcs.glsl"
 
 void iter(inout FLOAT_TYPE temp[NUM_COLS][NUM_ROWS], const uint first_row, const uint num_rows, const uint tid, const uint i) {
-    [[unroll]] for (uint j = 0; j < NUM_COLS; ++j) {
+     for (uint j = 0; j < NUM_COLS; ++j) {
         const uint col = i*BLOCK_SIZE + tid*K_PER_ITER;
 
         // Preload data_b block
@@ -66,7 +66,7 @@ void iter(inout FLOAT_TYPE temp[NUM_COLS][NUM_ROWS], const uint first_row, const
 #endif
 
         uint ibi = first_row*p.ncols;
-        [[unroll]] for (uint n = 0; n < num_rows; ++n) {
+         for (uint n = 0; n < num_rows; ++n) {
             const uint a_block_idx = (ibi + col)/QUANT_K_Q8_1 + a_offset;
             ibi += p.ncols;
 
@@ -84,8 +84,8 @@ void compute_outputs(const uint32_t first_row, const uint32_t num_rows) {
 
     FLOAT_TYPE temp[NUM_COLS][NUM_ROWS];
 
-    [[unroll]] for (uint j = 0; j < NUM_COLS; ++j) {
-        [[unroll]] for (uint n = 0; n < num_rows; ++n) {
+     for (uint j = 0; j < NUM_COLS; ++j) {
+         for (uint n = 0; n < num_rows; ++n) {
             temp[j][n] = FLOAT_TYPE(0.0f);
         }
     }
@@ -100,7 +100,7 @@ void compute_outputs(const uint32_t first_row, const uint32_t num_rows) {
     uint i = 0;
     while (i < unrolled_iters) {
         // Manually partially unroll the loop
-        [[unroll]] for (uint k = 0; k < unroll_count; ++k) {
+         for (uint k = 0; k < unroll_count; ++k) {
             iter(temp, first_row, num_rows, tid, i*K_PER_ITER);
             i++;
         }
@@ -111,7 +111,7 @@ void compute_outputs(const uint32_t first_row, const uint32_t num_rows) {
 
     while (i < unrolled_iters) {
         // Manually partially unroll the loop
-        [[unroll]] for (uint k = 0; k < unroll_count; ++k) {
+         for (uint k = 0; k < unroll_count; ++k) {
             iter(temp, first_row, num_rows, tid, i*K_PER_ITER);
             i++;
         }

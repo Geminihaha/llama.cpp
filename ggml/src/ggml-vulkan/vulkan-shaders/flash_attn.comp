@@ -105,7 +105,7 @@ void main() {
 
     uint32_t q_offset = gqa_iq1*p.nb01 + (iq2*p.nb02 + iq3*p.nb03) / 4;
 
-    [[unroll]] for (uint32_t idx = 0; idx < Br * HSK / 4; idx += gl_WorkGroupSize.x) {
+     for (uint32_t idx = 0; idx < Br * HSK / 4; idx += gl_WorkGroupSize.x) {
         uint32_t d = (idx + tid) % (HSK / 4);
         uint32_t r = (idx + tid) / (HSK / 4);
         const bool is_in_bounds = r < Br && d < HSK / 4 && i * Br + r < N;
@@ -145,8 +145,8 @@ void main() {
     barrier();
 
     FLOAT_TYPEV4 Of[rows_per_thread][HSV_per_thread / 4];
-    [[unroll]] for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
-        [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+     for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
+         for (uint32_t r = 0; r < rows_per_thread; ++r) {
             Of[r][d] = FLOAT_TYPEV4(0.0);
         }
     }
@@ -156,19 +156,19 @@ void main() {
     // Use -FLT_MAX/2 rather than -inf to reduce the possibility of NaNs, e.g. when computing Mold-M.
     const float NEG_FLT_MAX_OVER_2 = uintBitsToFloat(0xFEFFFFFF);
 
-    [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+     for (uint32_t r = 0; r < rows_per_thread; ++r) {
         Lf[r] = 0;
         Mf[r] = NEG_FLT_MAX_OVER_2;
     }
 
     ACC_TYPE slope[rows_per_thread];
-    [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+     for (uint32_t r = 0; r < rows_per_thread; ++r) {
         slope[r] = ACC_TYPE(1.0);
     }
 
     // ALiBi
     if (p.max_bias > 0.0f) {
-        [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+         for (uint32_t r = 0; r < rows_per_thread; ++r) {
             slope[r] = perElemOpComputeSlope(tile_row(r), col_tid, ACC_TYPE(0), iq2);
         }
     }
@@ -212,7 +212,7 @@ void main() {
 
                 float max_mask = NEG_FLT_MAX_OVER_2;
                 barrier();
-                [[unroll]] for (uint32_t idx = 0; idx < Bc * Br; idx += gl_WorkGroupSize.x) {
+                 for (uint32_t idx = 0; idx < Bc * Br; idx += gl_WorkGroupSize.x) {
                     uint32_t c = (idx + tid) % Bc;
                     uint32_t r = (idx + tid) / Bc;
                     if (idx + tid < Bc * Br) {
@@ -232,7 +232,7 @@ void main() {
                     tmpsh[gl_SubgroupID] = all_less ? NEG_FLT_MAX_OVER_2 : 0.0f;
                 }
                 barrier();
-                [[unroll]] for (uint s = 0; s < gl_NumSubgroups; ++s) {
+                 for (uint s = 0; s < gl_NumSubgroups; ++s) {
                     max_mask = max(max_mask, tmpsh[s]);
                 }
                 if (max_mask <= NEG_FLT_MAX_OVER_2) {
@@ -242,8 +242,8 @@ void main() {
         }
 
         ACC_TYPE Sf[rows_per_thread][cols_per_thread];
-        [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
-            [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
+         for (uint32_t r = 0; r < rows_per_thread; ++r) {
+             for (uint32_t c = 0; c < cols_per_thread; ++c) {
                 Sf[r][c] = ACC_TYPE(0.0);
             }
         }
@@ -251,7 +251,7 @@ void main() {
         if (SHMEM_STAGING != 0) {
             barrier();
 #ifndef MMQ
-            [[unroll]] for (uint32_t idx = 0; idx < Bc * HSK / 4; idx += gl_WorkGroupSize.x) {
+             for (uint32_t idx = 0; idx < Bc * HSK / 4; idx += gl_WorkGroupSize.x) {
                 uint32_t d = (idx + tid) % (HSK / 4);
                 uint32_t c = (idx + tid) / (HSK / 4);
                 if (idx + gl_WorkGroupSize.x <= Bc * HSK / 4 || c < Bc) {
@@ -273,7 +273,7 @@ void main() {
 #else // MMQ
             const uint ints_per_block = 8 / QUANT_R_MMQ;
             const uint quant_iters = Bc * HSK / 32 * ints_per_block;
-            [[unroll]] for (uint32_t idx = 0; idx < quant_iters; idx += gl_WorkGroupSize.x) {
+             for (uint32_t idx = 0; idx < quant_iters; idx += gl_WorkGroupSize.x) {
                 const uint32_t iqs = (idx + tid) % ints_per_block;
                 const uint32_t ib = (idx + tid) / ints_per_block;
                 const uint32_t c = ib / (HSK / 32);
@@ -296,13 +296,13 @@ void main() {
         // More d iterations means Q register caching becomes relevant
         // Few iterations means the additional registers needed are worse than the speed-up from caching
         if (HSK_per_thread / 4 > 4) {
-            [[unroll]] for (uint32_t d = 0; d < HSK_per_thread / 4; ++d) {
+             for (uint32_t d = 0; d < HSK_per_thread / 4; ++d) {
                 FLOAT_TYPEV4 Q_cache[rows_per_thread];
-                [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+                 for (uint32_t r = 0; r < rows_per_thread; ++r) {
                     Q_cache[r] = Qf[tile_row(r) * qf_stride + d * D_split + d_tid];
                 }
 
-                [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
+                 for (uint32_t c = 0; c < cols_per_thread; ++c) {
                     if (KV_bounds_check && j * Bc + c * cols_per_iter + col_tid >= KV) {
                         continue;
                     }
@@ -320,18 +320,18 @@ void main() {
                         K_Tf = FLOAT_TYPEV4(data_kv4[k_offset / 4 + (j * Bc + c * cols_per_iter + col_tid) * k_stride / 4 + d * D_split + d_tid]);
 #endif
                     }
-                    [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+                     for (uint32_t r = 0; r < rows_per_thread; ++r) {
                         Sf[r][c] += dot(ACC_TYPEV4(Q_cache[r]), ACC_TYPEV4(K_Tf));
                     }
                 }
             }
         } else {
-            [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
+             for (uint32_t c = 0; c < cols_per_thread; ++c) {
                 if (KV_bounds_check && j * Bc + c * cols_per_iter + col_tid >= KV) {
                     continue;
                 }
 
-                [[unroll]] for (uint32_t d = 0; d < HSK_per_thread / 4; ++d) {
+                 for (uint32_t d = 0; d < HSK_per_thread / 4; ++d) {
                     FLOAT_TYPEV4 K_Tf;
                     if (SHMEM_STAGING != 0) {
                         K_Tf = kvsh[(c * cols_per_iter + col_tid) * kvsh_stride + (d * D_split + d_tid)];
@@ -345,7 +345,7 @@ void main() {
                         K_Tf = FLOAT_TYPEV4(data_kv4[k_offset / 4 + (j * Bc + c * cols_per_iter + col_tid) * k_stride / 4 + d * D_split + d_tid]);
 #endif
                     }
-                    [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+                     for (uint32_t r = 0; r < rows_per_thread; ++r) {
                         Sf[r][c] += dot(ACC_TYPEV4(Qf[tile_row(r) * qf_stride + d * D_split + d_tid]), ACC_TYPEV4(K_Tf));
                     }
                 }
@@ -357,12 +357,12 @@ void main() {
                                 (hsk4 % 4 == 0) ? 4 :
                                 (hsk4 % 2 == 0) ? 2 : 1;
 
-        [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
+         for (uint32_t c = 0; c < cols_per_thread; ++c) {
             if (KV_bounds_check && j * Bc + c * cols_per_iter + col_tid >= KV) {
                 continue;
             }
 
-            [[unroll]] for (uint32_t d_block = 0; d_block < HSK_per_thread / 4; d_block += d_per_step) {
+             for (uint32_t d_block = 0; d_block < HSK_per_thread / 4; d_block += d_per_step) {
                 int32_t k_quants[d_per_step];
                 ACC_TYPEV2 k_dm;
 
@@ -377,7 +377,7 @@ void main() {
 
 #if defined(DATA_A_Q4_0) || defined(DATA_A_Q4_1) || defined(DATA_A_Q5_0) || defined(DATA_A_Q5_1)
                     if (d_per_step == 8) {
-                        [[unroll]] for (uint32_t d = 0; d < 4; d++) {
+                         for (uint32_t d = 0; d < 4; d++) {
                             uint vui = kblocksh[buf_ib].qs[d];
                             k_quants[d    ] = int32_t( vui       & 0x0F0F0F0F);
                             k_quants[d + 4] = int32_t((vui >> 4) & 0x0F0F0F0F);
@@ -391,7 +391,7 @@ void main() {
                     } else
 #endif
                     {
-                        [[unroll]] for (uint32_t d = 0; d < d_per_step; d++) {
+                         for (uint32_t d = 0; d < d_per_step; d++) {
                             k_quants[d] = get_k_qs_shmem(buf_ib, (d_tid * (HSK_per_thread / 4) + d_block) % 8 + d);
                         }
                     }
@@ -413,7 +413,7 @@ void main() {
 #elif defined(DATA_A_Q5_1)
                         uint qh = k_packed.k_data_packed16[k_offset + ib].qh;
 #endif
-                        [[unroll]] for (uint32_t d = 0; d < 4; d++) {
+                         for (uint32_t d = 0; d < 4; d++) {
 #if defined(A_TYPE_PACKED32)
                             uint vui = k_packed32.k_data_packed32[k_offset + ib].qs[d];
 #else
@@ -432,18 +432,18 @@ void main() {
                     } else
 #endif
                     {
-                        [[unroll]] for (uint32_t d = 0; d < d_per_step; d++) {
+                         for (uint32_t d = 0; d < d_per_step; d++) {
                             k_quants[d] = get_k_qs(ib, iqs + d * 4, k_offset);
                         }
                     }
                 }
 
-                [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+                 for (uint32_t r = 0; r < rows_per_thread; ++r) {
                     const uint qib = tile_row(r) * qf_stride + (d_tid * (HSK_per_thread / 4) + d_block) / 8;
                     const uint qiqs = (d_tid * (HSK_per_thread / 4) + d_block) % 8;
 
                     int32_t acc = 0;
-                    [[unroll]] for (uint32_t d = 0; d < d_per_step; d++) {
+                     for (uint32_t d = 0; d < d_per_step; d++) {
                         acc += dotPacked4x8EXT(Qf[qib].qs[qiqs + d], k_quants[d]);
                     }
 
@@ -456,26 +456,26 @@ void main() {
         }
 #endif // MMQ
 
-        [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
+         for (uint32_t c = 0; c < cols_per_thread; ++c) {
             // Compute sum across the D_split
-            [[unroll]] for (uint s = D_split / 2; s > 0; s >>= 1) {
-                [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+             for (uint s = D_split / 2; s > 0; s >>= 1) {
+                 for (uint32_t r = 0; r < rows_per_thread; ++r) {
                     Sf[r][c] += subgroupShuffleXor(Sf[r][c], s);
                 }
             }
         }
 
         if (LOGIT_SOFTCAP) {
-            [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
-                [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
+             for (uint32_t r = 0; r < rows_per_thread; ++r) {
+                 for (uint32_t c = 0; c < cols_per_thread; ++c) {
                     Sf[r][c] = ACC_TYPE(p.logit_softcap * tanh(Sf[r][c]));
                 }
             }
         }
 
         if (MASK_ENABLE && mask_opt_bits != MASK_OPT_ALL_ZERO) {
-            [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
-                [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+             for (uint32_t c = 0; c < cols_per_thread; ++c) {
+                 for (uint32_t r = 0; r < rows_per_thread; ++r) {
                     FLOAT_TYPE mvf = masksh[(c * cols_per_iter + col_tid) * masksh_stride + tile_row(r)];
 
                     Sf[r][c] += slope[r]*mvf;
@@ -484,9 +484,9 @@ void main() {
         }
 
         float eMf[rows_per_thread];
-        [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+         for (uint32_t r = 0; r < rows_per_thread; ++r) {
             float rowmaxf = NEG_FLT_MAX_OVER_2;
-            [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
+             for (uint32_t c = 0; c < cols_per_thread; ++c) {
                 if (KV_bounds_check && j * Bc + c * cols_per_iter + col_tid >= KV) {
                     continue;
                 }
@@ -502,15 +502,15 @@ void main() {
             Lf[r] = eMf[r]*Lf[r];
         }
 
-        [[unroll]] for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
-            [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+         for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
+             for (uint32_t r = 0; r < rows_per_thread; ++r) {
                 Of[r][d] = FLOAT_TYPE(eMf[r]) * Of[r][d];
             }
         }
 
         if (SHMEM_STAGING != 0) {
             barrier();
-            [[unroll]] for (uint32_t idx = 0; idx < Bc * HSV / 4; idx += gl_WorkGroupSize.x) {
+             for (uint32_t idx = 0; idx < Bc * HSV / 4; idx += gl_WorkGroupSize.x) {
                 uint32_t d = (idx + tid) % (HSV / 4);
                 uint32_t c = (idx + tid) / (HSV / 4);
                 if (idx + gl_WorkGroupSize.x <= Bc * HSV / 4 || c < Bc) {
@@ -532,18 +532,18 @@ void main() {
             barrier();
         }
 
-        [[unroll]] for (uint32_t c = 0; c < cols_per_thread; ++c) {
+         for (uint32_t c = 0; c < cols_per_thread; ++c) {
             if (KV_bounds_check && j * Bc + c * cols_per_iter + col_tid >= KV) {
                 continue;
             }
 
             FLOAT_TYPE Pf[rows_per_thread];
-            [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+             for (uint32_t r = 0; r < rows_per_thread; ++r) {
                 Pf[r] = FLOAT_TYPE(exp(float(Sf[r][c]) - Mf[r]));
                 Lf[r] += Pf[r];
             }
 
-            [[unroll]] for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
+             for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
                 FLOAT_TYPEV4 Vf;
                 if (SHMEM_STAGING != 0) {
                     Vf = kvsh[(c * cols_per_iter + col_tid) * kvsh_stride + (d * D_split + d_tid)];
@@ -557,7 +557,7 @@ void main() {
                     Vf = FLOAT_TYPEV4(data_vv4[v_offset / 4 + (j * Bc + c * cols_per_iter + col_tid) * v_stride / 4 + d * D_split + d_tid]);
 #endif
                 }
-                [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+                 for (uint32_t r = 0; r < rows_per_thread; ++r) {
                     Of[r][d] += FLOAT_TYPEV4(Pf[r] * Vf);
                 }
             }
@@ -569,12 +569,12 @@ void main() {
 
     // reduce across threads
 
-    [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+     for (uint32_t r = 0; r < rows_per_thread; ++r) {
         float rowmaxf = Mf[r];
 
         // Compute max across the row
         if (SubGroupSize > 0) {
-            [[unroll]] for (uint s = D_split; s < SubGroupSize; s *= 2) {
+             for (uint s = D_split; s < SubGroupSize; s *= 2) {
                 rowmaxf = max(rowmaxf, subgroupShuffleXor(rowmaxf, s));
             }
             if (row_split == 1) {
@@ -585,7 +585,7 @@ void main() {
                 }
                 barrier();
                 rowmaxf = tmpsh[d_tid];
-                [[unroll]] for (uint32_t s = 1; s < num_subgroups; ++s) {
+                 for (uint32_t s = 1; s < num_subgroups; ++s) {
                     rowmaxf = max(rowmaxf, tmpsh[s * D_split + d_tid]);
                 }
             }
@@ -593,7 +593,7 @@ void main() {
             barrier();
             tmpsh[tid] = rowmaxf;
             barrier();
-            [[unroll]] for (int s = int(threads_per_rowgroup) / 2; s >= D_split; s >>= 1) {
+             for (int s = int(threads_per_rowgroup) / 2; s >= D_split; s >>= 1) {
                 if (rowgroup_tid < s) {
                     tmpsh[tid] = max(tmpsh[tid], tmpsh[tid ^ s]);
                 }
@@ -613,7 +613,7 @@ void main() {
 
         // Compute sum across the row
         if (SubGroupSize > 0) {
-            [[unroll]] for (uint s = D_split; s < SubGroupSize; s *= 2) {
+             for (uint s = D_split; s < SubGroupSize; s *= 2) {
                 Lf[r] += subgroupShuffleXor(Lf[r], s);
             }
             if (row_split == 1) {
@@ -623,7 +623,7 @@ void main() {
                 }
                 barrier();
                 Lf[r] = tmpsh[d_tid];
-                [[unroll]] for (uint32_t s = 1; s < num_subgroups; ++s) {
+                 for (uint32_t s = 1; s < num_subgroups; ++s) {
                     Lf[r] += tmpsh[s * D_split + d_tid];
                 }
             }
@@ -631,7 +631,7 @@ void main() {
             barrier();
             tmpsh[tid] = Lf[r];
             barrier();
-            [[unroll]] for (int s = int(threads_per_rowgroup) / 2; s >= D_split; s >>= 1) {
+             for (int s = int(threads_per_rowgroup) / 2; s >= D_split; s >>= 1) {
                 if (rowgroup_tid < s) {
                     tmpsh[tid] = tmpsh[tid] + tmpsh[tid ^ s];
                 }
@@ -640,11 +640,11 @@ void main() {
             Lf[r] = tmpsh[row_tid * threads_per_rowgroup + d_tid];
         }
 
-        [[unroll]] for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
+         for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
             Of[r][d] = FLOAT_TYPE(eMf) * Of[r][d];
 
             if (SubGroupSize > 0) {
-                [[unroll]] for (uint s = D_split; s < SubGroupSize; s *= 2) {
+                 for (uint s = D_split; s < SubGroupSize; s *= 2) {
                     if (!OLD_AMD_WINDOWS) {
                         Of[r][d] += subgroupShuffleXor(Of[r][d], s);
                     } else {
@@ -661,7 +661,7 @@ void main() {
                     }
                     barrier();
                     Of[r][d] = tmpshv4[d_tid];
-                    [[unroll]] for (uint32_t s = 1; s < num_subgroups; ++s) {
+                     for (uint32_t s = 1; s < num_subgroups; ++s) {
                         Of[r][d] += tmpshv4[s * D_split + d_tid];
                     }
                 }
@@ -669,7 +669,7 @@ void main() {
                 barrier();
                 tmpshv4[tid] = Of[r][d];
                 barrier();
-                [[unroll]] for (int s = int(threads_per_rowgroup) / 2; s >= D_split; s >>= 1) {
+                 for (int s = int(threads_per_rowgroup) / 2; s >= D_split; s >>= 1) {
                     if (rowgroup_tid < s) {
                         Of[r][d] += tmpshv4[tid ^ s];
                         tmpshv4[tid] = Of[r][d];
@@ -689,17 +689,17 @@ void main() {
             // note: O and Q have swapped coord 1,2.
             uint32_t o_offset = HSV * p.ne1 * (split_k_index + p.k_num * (gqa_iq1 + p.ne2 * iq3)) / 4;
 
-            [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+             for (uint32_t r = 0; r < rows_per_thread; ++r) {
                 const uint row = tile_row(r);
                 if (row < N) {
-                    [[unroll]] for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
+                     for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
                         gqaStore(row, d * D_split + d_tid, Of[r][d], o_offset, iq2, N);
                     }
                 }
             }
 
             o_offset = HSV * p.ne1 * p.k_num * p.ne2 * p.ne3 + p.ne1 * 2 * (split_k_index + p.k_num * (gqa_iq1 + p.ne2 * iq3));
-            [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+             for (uint32_t r = 0; r < rows_per_thread; ++r) {
                 const uint row = tile_row(r);
                 if (row < N) {
                     perElemOpStoreCol0(row, 0u, ACC_TYPE(Lf[r]), o_offset, iq2, N);
@@ -707,14 +707,14 @@ void main() {
                 }
             }
         } else {
-            [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+             for (uint32_t r = 0; r < rows_per_thread; ++r) {
                 const uint row = tile_row(r);
                 const uint global_row = i * Br + row;
 
                 if (global_row < N) {
                     uint32_t o_offset = HSV * p.ne1 * (split_k_index + p.k_num * (global_row + p.ne2 * iq3)) / 4;
 
-                    [[unroll]] for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
+                     for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
                         data_ov4[o_offset + iq2 * HSV/4 + d * D_split + d_tid] = D_TYPEV4(Of[r][d]);
                     }
                 }
@@ -730,7 +730,7 @@ void main() {
     }
 
     if ((p.mask_n_head_log2 & SINK_ENABLE_BIT) != 0) {
-        [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+         for (uint32_t r = 0; r < rows_per_thread; ++r) {
             float sink = perElemOpGetSink(tile_row(r), 0u, ACC_TYPE(0), iq2);
 
             float ms = 1.0f;
@@ -739,7 +739,7 @@ void main() {
             if (sink > Mf[r]) {
                 ms = exp(Mf[r] - sink);
 
-                [[unroll]] for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
+                 for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
                     Of[r][d] *= FLOAT_TYPE(ms);
                 }
             } else {
@@ -751,12 +751,12 @@ void main() {
     }
 
     float Lfrcp[rows_per_thread];
-    [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+     for (uint32_t r = 0; r < rows_per_thread; ++r) {
         Lfrcp[r] = (Lf[r] == 0.0) ? 0.0 : (1.0 / Lf[r]);
     }
 
-    [[unroll]] for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
-        [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+     for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
+         for (uint32_t r = 0; r < rows_per_thread; ++r) {
             Of[r][d] *= FLOAT_TYPE(Lfrcp[r]);
 #if defined(FLOAT_TYPE_MAX)
             Of[r][d] = clamp(Of[r][d], -FLOAT_TYPE_MAX, FLOAT_TYPE_MAX);
@@ -767,19 +767,19 @@ void main() {
     uint32_t o_offset = (gqa_iq1*p.ne1*HSV + iq3*p.ne2*p.ne1*HSV) / 4;
 
     if (p.gqa_ratio > 1) {
-        [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+         for (uint32_t r = 0; r < rows_per_thread; ++r) {
             const uint row = tile_row(r);
             if (row < N) {
-                [[unroll]] for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
+                 for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
                     gqaStore(row, d * D_split + d_tid, Of[r][d], o_offset, iq2, N);
                 }
             }
         }
     } else {
-        [[unroll]] for (uint32_t r = 0; r < rows_per_thread; ++r) {
+         for (uint32_t r = 0; r < rows_per_thread; ++r) {
             const uint row = tile_row(r);
             if (i * Br + row < N) {
-                [[unroll]] for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
+                 for (uint32_t d = 0; d < HSV_per_thread / 4; ++d) {
                     data_ov4[o_offset + (iq2 * HSV + (i * Br + row) * p.ne1 * HSV) / 4 + d * D_split + d_tid] = D_TYPEV4(Of[r][d]);
                 }
             }

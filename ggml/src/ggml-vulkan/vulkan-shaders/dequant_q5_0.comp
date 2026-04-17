@@ -25,7 +25,7 @@ void main() {
 
     const uint q_idx = 8*il;
 
-    [[unroll]] for (uint l = 0; l < 8; ++l) {
+     for (uint l = 0; l < 8; ++l) {
         const uint iqs = q_idx + l;
         const uint vui = uint(data_a[ib].qs[iqs]);
         data_b[b_idx + l +  0] = D_TYPE(d * (((vui & 0xF) | (((qh >> iqs) << 4) & 0x10)) - 16.0f));

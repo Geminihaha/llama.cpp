@@ -47,7 +47,7 @@ void topk(bool needs_bounds_check, const uint row) {
 
     if (p.k == 1) {
         // Fast path for single output - just do a max reduction
-        [[unroll]] for (int s = BLOCK_SIZE / 2; s >= 1; s /= 2) {
+         for (int s = BLOCK_SIZE / 2; s >= 1; s /= 2) {
             if (col < s) {
                 ivec2 a = dst_row[col];
                 ivec2 b = dst_row[col + s];

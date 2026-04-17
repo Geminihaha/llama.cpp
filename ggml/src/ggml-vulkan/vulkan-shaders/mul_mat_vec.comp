@@ -18,7 +18,7 @@ uint a_offset, b_offset, d_offset, y_offset;
 
 void iter(inout FLOAT_TYPE temp[NUM_COLS][NUM_ROWS], const uint first_row, const uint num_rows, const uint tid, const uint i, bool lastiter)
 {
-    [[unroll]] for (uint j = 0; j < NUM_COLS; ++j) {
+     for (uint j = 0; j < NUM_COLS; ++j) {
         const uint col = i*BLOCK_SIZE + K_PER_ITER*tid;
         const uint iqs = (col%QUANT_K)/QUANT_R; // quant index
         const uint iybs = col - col%QUANT_K; // y block start index
@@ -48,7 +48,7 @@ void iter(inout FLOAT_TYPE temp[NUM_COLS][NUM_ROWS], const uint first_row, const
         }
 #endif
         uint ibi = first_row*p.ncols;
-        [[unroll]] for (uint n = 0; n < num_rows; ++n) {
+         for (uint n = 0; n < num_rows; ++n) {
             const uint ib = (ibi + col)/QUANT_K; // block index
             ibi += p.ncols;
 
@@ -92,8 +92,8 @@ void compute_outputs(const uint32_t first_row, const uint32_t num_rows) {
 
     FLOAT_TYPE temp[NUM_COLS][NUM_ROWS];
 
-    [[unroll]] for (uint j = 0; j < NUM_COLS; ++j) {
-        [[unroll]] for (uint i = 0; i < NUM_ROWS; ++i) {
+     for (uint j = 0; j < NUM_COLS; ++j) {
+         for (uint i = 0; i < NUM_ROWS; ++i) {
             temp[j][i] = FLOAT_TYPE(0);
         }
     }
@@ -118,7 +118,7 @@ void compute_outputs(const uint32_t first_row, const uint32_t num_rows) {
     uint i = 0;
     while (i < unrolled_iters) {
         // Manually partially unroll the loop
-        [[unroll]] for (uint k = 0; k < unroll_count; ++k) {
+         for (uint k = 0; k < unroll_count; ++k) {
             iter(temp, first_row, num_rows, tid, i*K_PER_ITER, false);
             i++;
         }
@@ -137,7 +137,7 @@ void compute_outputs(const uint32_t first_row, const uint32_t num_rows) {
 
     while (i < unrolled_iters) {
         // Manually partially unroll the loop
-        [[unroll]] for (uint k = 0; k < unroll_count; ++k) {
+         for (uint k = 0; k < unroll_count; ++k) {
             iter(temp, first_row, num_rows, tid, i*K_PER_ITER, false);
             i++;
         }

@@ -62,7 +62,7 @@ void rms_norm(uint num_iters) {
 #endif
     FLOAT_TYPE sum = FLOAT_TYPE(0.0f); // partial sum for thread in warp
 
-    [[unroll]] for (uint col = tid, idx = 0; idx < num_iters; col += BLOCK_SIZE, ++idx) {
+     for (uint col = tid, idx = 0; idx < num_iters; col += BLOCK_SIZE, ++idx) {
         FLOAT_TYPE xi = FLOAT_TYPE(0);
         if (col < ncols) {
             xi = FLOAT_TYPE(data_a[a_offset + col]);
@@ -73,7 +73,7 @@ void rms_norm(uint num_iters) {
     sumsh[tid] = sum;
     // sum up partial sums and write back result
     barrier();
-    [[unroll]] for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+     for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
             sum += sumsh[tid + s];
             sumsh[tid] = sum;
@@ -87,14 +87,14 @@ void rms_norm(uint num_iters) {
 
     if (do_multiply) {
         if (ncols > p.ne10) {
-            [[unroll]] for (uint col = tid, idx = 0; idx < num_iters; col += BLOCK_SIZE, ++idx) {
+             for (uint col = tid, idx = 0; idx < num_iters; col += BLOCK_SIZE, ++idx) {
                 if (col >= ncols) {
                     continue;
                 }
                 data_d[d_offset + col] = D_TYPE(scale * FLOAT_TYPE(data_a[a_offset + col]) * FLOAT_TYPE(data_b[b_offset + fastmod(col, p.ne10)]));
             }
         } else {
-            [[unroll]] for (uint col = tid, idx = 0; idx < num_iters; col += BLOCK_SIZE, ++idx) {
+             for (uint col = tid, idx = 0; idx < num_iters; col += BLOCK_SIZE, ++idx) {
                 if (col >= ncols) {
                     continue;
                 }
@@ -102,7 +102,7 @@ void rms_norm(uint num_iters) {
             }
         }
     } else {
-        [[unroll]] for (uint col = tid, idx = 0; idx < num_iters; col += BLOCK_SIZE, ++idx) {
+         for (uint col = tid, idx = 0; idx < num_iters; col += BLOCK_SIZE, ++idx) {
             if (col >= ncols) {
                 continue;
             }

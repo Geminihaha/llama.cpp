@@ -14,7 +14,7 @@ uint csel = 0;
 void calc_superblock(const uint a_offset, const uint b_offset, const uint itid, const uint v_im, const uint ix, const uint q_offset, const uint y_offset, const uint i, const uint num_blocks_per_row, const uint first_row, const uint num_rows, const bool all_threads) {
     const uint y_idx = i * QUANT_K + y_offset;
 
-    [[unroll]] for (uint n = 0; n < num_rows; ++n) {
+     for (uint n = 0; n < num_rows; ++n) {
         const uint ib0 = a_offset + (first_row+n)*num_blocks_per_row;
         csel ^= 1;
 
@@ -43,7 +43,7 @@ void calc_superblock(const uint a_offset, const uint b_offset, const uint itid, 
 
         const FLOAT_TYPEV2 dm = vec2(data_a[ib0 + i].dm);
 
-        [[unroll]] for (uint j = 0; j < NUM_COLS; ++j) {
+         for (uint j = 0; j < NUM_COLS; ++j) {
             vec2 b0 =   vec2(data_b_v2[(j*p.batch_stride_b + b_offset + y_idx) / 2 +  0]);
             vec2 b16 =  vec2(data_b_v2[(j*p.batch_stride_b + b_offset + y_idx) / 2 +  8]);
             vec2 b32 =  vec2(data_b_v2[(j*p.batch_stride_b + b_offset + y_idx) / 2 + 16]);
@@ -55,7 +55,7 @@ void calc_superblock(const uint a_offset, const uint b_offset, const uint itid, 
 
             FLOAT_TYPE sum1 = FLOAT_TYPE(0.0);
             FLOAT_TYPE sum2 = FLOAT_TYPE(0.0);
-            [[unroll]] for (int l = 0; l < 2; ++l) {
+             for (int l = 0; l < 2; ++l) {
                 sum1 = fma(FLOAT_TYPE(b0[l]),   sccache1[csel][ix][    8*v_im] * qs_u32_0[l  ],
                        fma(FLOAT_TYPE(b16[l]),  sccache1[csel][ix][1 + 8*v_im] * qs_u32_0[l+2],
                        fma(FLOAT_TYPE(b32[l]),  sccache1[csel][ix][2 + 8*v_im] * qs_u32_2[l  ],
@@ -97,8 +97,8 @@ void compute_outputs(const uint32_t first_row, const uint32_t num_rows) {
     const uint q_offset = 32*v_im + l0;
     const uint y_offset = 128*v_im + l0;
 
-    [[unroll]] for (uint j = 0; j < NUM_COLS; ++j) {
-        [[unroll]] for (uint i = 0; i < NUM_ROWS; ++i) {
+     for (uint j = 0; j < NUM_COLS; ++j) {
+         for (uint i = 0; i < NUM_ROWS; ++i) {
             temp[j][i] = FLOAT_TYPE(0);
         }
     }
@@ -106,7 +106,7 @@ void compute_outputs(const uint32_t first_row, const uint32_t num_rows) {
     const uint nbr_par_th = num_blocks_per_row%it_size;
     const uint nbr_all_th = num_blocks_per_row - nbr_par_th;
     uint i0 = 0;
-    [[unroll]] for (; i0 < nbr_all_th; i0 += it_size)
+     for (; i0 < nbr_all_th; i0 += it_size)
         calc_superblock(a_offset, b_offset, itid, v_im, ix, q_offset, y_offset, i0 + ix, num_blocks_per_row, first_row, num_rows, true);
     calc_superblock(a_offset, b_offset, itid, v_im, ix, q_offset, y_offset, i0 + ix, num_blocks_per_row, first_row, num_rows, false);
 

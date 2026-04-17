@@ -54,7 +54,7 @@ void main() {
     }
     barrier();
     sum = 0;
-    [[unroll]] for (uint s = 0; s < BLOCK_SIZE / SUBGROUP_SIZE; ++s) {
+     for (uint s = 0; s < BLOCK_SIZE / SUBGROUP_SIZE; ++s) {
         sum += temp[s];
     }
 

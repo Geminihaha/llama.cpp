@@ -48,7 +48,7 @@ void im2col(const uint ow, const uint z_idx) {
     do {
         const uint wg_offset = wg_x * 512;
 
-        [[unroll]] for (uint i = 0; i < NUM_ITER; ++i) {
+         for (uint i = 0; i < NUM_ITER; ++i) {
             const uint chw_idx = wg_offset + gidx + i * BLOCK_SIZE;
 
             if (chw_idx >= p.CHW) {
