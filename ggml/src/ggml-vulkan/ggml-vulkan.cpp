@@ -5040,8 +5040,10 @@ static vk_device ggml_vk_get_device(size_t idx) {
 
         // Implementing the async backend interfaces seems broken on older Intel HW,
         // see https://github.com/ggml-org/llama.cpp/issues/17302.
+        // Also disable on Qualcomm Adreno because multi-queue usage is often unstable.
         device->support_async = (device->vendor_id != VK_VENDOR_ID_INTEL ||
                                  std::string(device->properties.deviceName.data()).find("(DG1)") == std::string::npos) &&
+                                 device->vendor_id != VK_VENDOR_ID_QUALCOMM &&
                                 getenv("GGML_VK_DISABLE_ASYNC") == nullptr;
 
         if (!device->support_async) {
@@ -5080,7 +5082,7 @@ static vk_device ggml_vk_get_device(size_t idx) {
 
         device->subgroup_size = subgroup_props.subgroupSize;
         device->subgroup_size_log2 = uint32_t(log2f(float(device->subgroup_size)));
-        device->uma = device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
+        device->uma = device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu || device->vendor_id == VK_VENDOR_ID_QUALCOMM;
         if (sm_builtins) {
             device->shader_core_count = sm_props.shaderSMCount;
         } else if (amd_shader_core_properties2) {
