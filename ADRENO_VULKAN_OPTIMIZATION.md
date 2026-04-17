@@ -28,6 +28,12 @@
 *   **원인:** Adreno 드라이버가 `buffer_device_address` 기능을 지원한다고 보고하지만, 실제 포인터 주소를 계산하거나 텐서 데이터를 가상 매핑할 때 드라이버 내부 메모리 오염 발생.
 *   **해결:** `ggml-vulkan.cpp`에서 Qualcomm 장치 감지 시 `buffer_device_address`를 강제로 `false`로 설정하여 안정성 확보.
 
+### D. SCALE 연산 수치 오류 해결 (Shader Simplification)
+*   **증상:** 모델 웜업(Warmup) 중 `SCALE` 연산에서 CPU 결과와 GPU 결과가 불일치하는 수치 오류 발생 (`avg_err` 임계값 초과).
+*   **원인:** 기존 `scale.comp` 셰이더의 루프 언롤링(`[[unroll]]`) 및 1개 스레드가 다수의 데이터를 처리하는 방식(`num_iter`)이 Adreno 드라이버의 최적화 과정에서 잘못된 인덱스 참조 또는 연산 정밀도 저하를 유발.
+*   **해결:** `scale.comp`를 1스레드 당 1데이터를 처리하는 가장 단순하고 표준적인 구조로 변경. 복잡한 루프를 제거하여 드라이버의 오작동 가능성 차단.
+*   **결과:** `SCALE` 연산 유효성 검사 통과 및 다음 연산으로 진행 가능.
+
 ---
 
 ## 3. 구현 체크리스트
@@ -35,6 +41,7 @@
 - [x] `ggml-vulkan.cpp`: Adreno GPU에서 `external_memory_host` 확장 비활성화 패치 적용
 - [x] `ggml-vulkan.cpp`: Adreno GPU에서 비동기 연산 비활성화 및 UMA 강제 적용
 - [x] `ggml-vulkan.cpp`: Adreno GPU에서 `buffer_device_address` 비활성화 (Segmentation Fault 방지)
+- [x] `vulkan-shaders`: `scale.comp` 수치 오류 수정을 위한 셰이더 단순화
 - [ ] `vulkan-shaders`: Adreno 6xx용 `subgroup` 연산 fallback (Shared Memory 활용) 구현
 - [ ] `ggml-vulkan.cpp`: Adreno 맞춤형 Local Work Size (LWS) 자동 튜닝 로직
 
@@ -44,7 +51,8 @@
 성공적인 실행을 위해 다음 옵션 조합을 권장합니다:
 *   **`-fit off`**: 초기 메모리 자동 계산 과정에서의 드라이버 충돌 방지.
 *   **`-c 2048` (또는 이하)**: 모바일 메모리 제약을 고려한 컨텍스트 크기 조정.
-*   **`--no-mmap` 제거**: 안드로이드에서는 시스템 기본 메모리 관리를 사용하는 것이 더 안정적임.
+*   **`--mlock` 비권장**: 안드로이드(비루트) 환경에서는 대용량 메모리 고정 권한이 제한되어 있어 `GGML_ASSERT(addr)` 오류를 유발함.
+*   **`--no-mmap` 비권장**: RAM 부족 시 mmap을 통해 OS가 가상 메모리를 관리하게 두는 것이 더 안정적임.
 *   **`-ngl [레이어수]`**: 레이어를 점진적으로 늘려가며 GPU 가용 메모리 확인.
 
 ---
