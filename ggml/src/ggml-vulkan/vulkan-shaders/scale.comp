@@ -3,14 +3,17 @@
 #include "types.glsl"
 #include "generic_unary_head.glsl"
 
-layout(local_size_x_id = 0, local_size_y = 1, local_size_z = 1) in;
+const uint num_threads = 128;
+
+layout(local_size_x = num_threads, local_size_y = 1, local_size_z = 1) in;
 
 void main() {
-    const uint idx = get_idx();
+    uint idx = get_idx();
 
-    if (idx >= p.ne) {
-        return;
+    for (uint i = 0; i < 4; ++i) {
+        if (idx < p.ne) {
+            data_d[get_doffset() + idx] = D_TYPE(FLOAT_TYPE(data_a[get_aoffset() + idx]) * FLOAT_TYPE(p.param1) + FLOAT_TYPE(p.param2));
+        }
+        idx += num_threads;
     }
-
-    data_d[get_doffset() + idx] = D_TYPE(FLOAT_TYPE(data_a[get_aoffset() + idx]) * FLOAT_TYPE(p.param1) + FLOAT_TYPE(p.param2));
 }
