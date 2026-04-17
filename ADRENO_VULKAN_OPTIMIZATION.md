@@ -23,12 +23,18 @@
 *   **비동기 연산(Async) 비활성화:** Adreno 드라이버는 다중 큐(Multi-queue) 사용 시 레이스 컨디션으로 인한 크래시가 빈번함. Qualcomm 장치 감지 시 `support_async`를 강제로 `false`로 설정.
 *   **UMA(Unified Memory Architecture) 강제 적용:** Adreno GPU가 통합 메모리 구조임을 명시하여, 호스트 가시 메모리 활용도를 높이고 불필요한 메모리 복사 오버헤드를 방지함.
 
+### C. Shader Device Address 기능 비활성화 (보안 패치)
+*   **증상:** 모델 로드(`load_tensors`) 도중 또는 `-ngl 0` 설정임에도 불구하고 세그먼트 폴트 발생.
+*   **원인:** Adreno 드라이버가 `buffer_device_address` 기능을 지원한다고 보고하지만, 실제 포인터 주소를 계산하거나 텐서 데이터를 가상 매핑할 때 드라이버 내부 메모리 오염 발생.
+*   **해결:** `ggml-vulkan.cpp`에서 Qualcomm 장치 감지 시 `buffer_device_address`를 강제로 `false`로 설정하여 안정성 확보.
+
 ---
 
 ## 3. 구현 체크리스트
 - [x] `ggml-vulkan.cpp`: Qualcomm Vendor ID (`0x5143`) 감지 로직 추가
 - [x] `ggml-vulkan.cpp`: Adreno GPU에서 `external_memory_host` 확장 비활성화 패치 적용
 - [x] `ggml-vulkan.cpp`: Adreno GPU에서 비동기 연산 비활성화 및 UMA 강제 적용
+- [x] `ggml-vulkan.cpp`: Adreno GPU에서 `buffer_device_address` 비활성화 (Segmentation Fault 방지)
 - [ ] `vulkan-shaders`: Adreno 6xx용 `subgroup` 연산 fallback (Shared Memory 활용) 구현
 - [ ] `ggml-vulkan.cpp`: Adreno 맞춤형 Local Work Size (LWS) 자동 튜닝 로직
 

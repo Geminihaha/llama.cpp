@@ -5294,7 +5294,7 @@ static vk_device ggml_vk_get_device(size_t idx) {
                             getenv("GGML_VK_DISABLE_MULTI_ADD") == nullptr;
 
         device->shader_int64 = device_features2.features.shaderInt64;
-        device->buffer_device_address = vk12_features.bufferDeviceAddress;
+        device->buffer_device_address = vk12_features.bufferDeviceAddress && device->vendor_id != VK_VENDOR_ID_QUALCOMM;
         device->vulkan_memory_model = vk12_features.vulkanMemoryModel;
 
         if (device->subgroup_size_control) {
