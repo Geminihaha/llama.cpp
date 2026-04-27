@@ -6238,7 +6238,6 @@ static vk_pipeline ggml_vk_get_dequantize_mul_mat_vec(ggml_backend_vk_context * 
             case GGML_TYPE_Q5_K:
             case GGML_TYPE_Q6_K:
             case GGML_TYPE_IQ1_S:
-            case GGML_TYPE_IQ1_M:
                 break;
             default:
                 return nullptr;
@@ -6400,7 +6399,6 @@ static vk_pipeline ggml_vk_get_dequantize_mul_mat_vec_id(ggml_backend_vk_context
             case GGML_TYPE_Q5_K:
             case GGML_TYPE_Q6_K:
             case GGML_TYPE_IQ1_S:
-            case GGML_TYPE_IQ1_M:
                 break;
             default:
                 return nullptr;
@@ -15317,6 +15315,18 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
     ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)dev->context;
     const vk_device& device = ggml_vk_get_device(ctx->device);
 
+    auto const & is_misaligned = [&](const ggml_tensor * t) {
+        if (t == nullptr) return false;
+        size_t offset = t->view_offs;
+        return (offset & (device->properties.limits.minStorageBufferOffsetAlignment - 1)) != 0;
+    };
+
+    if (device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
+        if (is_misaligned(op) || is_misaligned(op->src[0]) || is_misaligned(op->src[1]) || is_misaligned(op->src[2]) || is_misaligned(op->src[3])) {
+            return false;
+        }
+    }
+
     const bool uses_bda = (op->op == GGML_OP_IM2COL || op->op == GGML_OP_IM2COL_3D) &&
                           device->shader_int64 && device->buffer_device_address;
 
@@ -15408,11 +15418,16 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
                     case GGML_TYPE_Q5_0:
                     case GGML_TYPE_Q5_1:
                     case GGML_TYPE_Q8_0:
+                        break;
                     case GGML_TYPE_Q2_K:
                     case GGML_TYPE_Q3_K:
                     case GGML_TYPE_Q4_K:
                     case GGML_TYPE_Q5_K:
                     case GGML_TYPE_Q6_K:
+                        if (device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
+                            return false;
+                        }
+                        break;
                     case GGML_TYPE_IQ1_S:
                     case GGML_TYPE_IQ1_M:
                     case GGML_TYPE_IQ2_XXS:
@@ -15423,7 +15438,6 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
                     case GGML_TYPE_IQ4_XS:
                     case GGML_TYPE_IQ4_NL:
                     case GGML_TYPE_MXFP4:
-                    case GGML_TYPE_NVFP4:
                         break;
                     default:
                         return false;
@@ -15454,6 +15468,9 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
             }
         case GGML_OP_FLASH_ATTN_EXT:
             {
+                if (device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
+                    return false;
+                }
                 bool coopmat2 = device->coopmat2;
                 uint32_t HSK = op->src[1]->ne[0];
                 uint32_t HSV = op->src[2]->ne[0];
@@ -15722,6 +15739,9 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
         case GGML_OP_FILL:
             return op->type == GGML_TYPE_F32;
         case GGML_OP_SCALE:
+            if (device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
+                return false;
+            }
             return ggml_is_contiguous(op->src[0]) && op->src[0]->type == GGML_TYPE_F32;
         case GGML_OP_PAD:
         case GGML_OP_ROLL:

@@ -3021,6 +3021,12 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
         }
         const int layer_gpu = std::upper_bound(splits.begin(), splits.begin() + n_devices(), float(il - i_gpu_start)/act_gpu_layers) - splits.begin();
         auto * dev = devices.at(layer_gpu).dev;
+
+        const char * name = ggml_backend_dev_name(dev);
+        if (name && strstr(name, "Adreno")) {
+            return {cpu_dev, &pimpl->cpu_buft_list};
+        }
+
         LLAMA_LOG_DEBUG("load_tensors: layer %3d assigned to device %s, is_swa = %d\n", il, ggml_backend_dev_name(dev), is_swa);
         return {dev, &pimpl->gpu_buft_list.at(dev)};
     };

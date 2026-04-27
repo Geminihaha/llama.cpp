@@ -1,53 +1,44 @@
-# Adreno 660 Vulkan 백엔드 안정화 작업 보고서 (2026-04-17)
+# ADRENO_VULKAN_STABILIZATION_REPORT.md
 
-본 문서는 Qualcomm Adreno 660 GPU 환경에서 `llama.cpp`의 Vulkan 백엔드를 정상 구동시키기 위해 진행한 안정화 작업 내용을 기록합니다.
+## 1. 개요
+*   **목표:** Android(Termux) 환경에서 Adreno 660 GPU의 Vulkan 백엔드를 활용하여 Gemma-4/3n 모델 가속.
+*   **현재 상태:** CPU 단독 실행 시 약 12 t/s로 정상 작동 확인. Vulkan 가속 시도 중 수치 오류 및 세그먼테이션 폴트(Segmentation fault) 발생으로 인해 하이브리드 패치 진행.
 
----
+## 2. 주요 오류 현상 및 원인 분석
 
-## 1. 분석된 주요 문제점
-*   **파이프라인 생성 오류 (`ErrorUnknown`):** `f16acc` (16비트 정밀도 누적 연산) 및 `cooperative_matrix` 기능을 사용하는 셰이더 컴파일 시 Adreno 드라이버가 내부 오류를 일으키며 크래시 발생.
-*   **실행 단계 세그먼트 폴트 (Segmentation Fault):** 행렬 연산(`MUL_MAT`)에서 컬럼 수(`N`)가 9 이상일 때, 성능 최적화용 `mul_mm` 커널의 서브그룹(Subgroup) 로직 및 메모리 정렬 최적화가 드라이버와 충돌하여 발생.
-*   **루프 언롤링 불안정성:** `[[unroll]]` 매크로가 과도하게 적용된 복잡한 셰이더에서 드라이버 컴파일러가 리소스 할당에 실패함.
+| 현상 | 발생 지점 | 원인 추정 |
+| :--- | :--- | :--- |
+| **수치 오류 (`avg_err`)** | `SCALE` 연산 (node_49) | Adreno 드라이버의 FP16/FP32 정밀도 타협 및 IEEE-754 미준수. |
+| **Pipeline Creation Failed** | `Q4_K` 행렬 연산 커널 컴파일 | Adreno 드라이버의 레지스터(Register) 부족 혹은 셰이더 복잡도 한계. |
+| **Segmentation Fault** | 프롬프트 처리 중 (70~94%) | Gemma 4/3n의 **Shared KV layers** 및 **ISWA** 로직이 Vulkan Buffer View와 충돌. |
+| **ggml_abort** | `initializing slots` 단계 | Vulkan VRAM 할당 및 동기화 과정에서 드라이버 내부 메모리 관리 오류. |
 
----
+## 3. 시도했던 방법 및 패치 내역
 
-## 2. 적용된 해결책
+### [방법 1] 런타임 옵션 조정
+*   **`-b 1`**: 배치 사이즈를 최소화하여 메모리 압박 완화 시도.
+*   **`-fa off`**: 불안정한 Flash Attention 커널 비활성화.
+*   **`--no-warmup`**: 초기 수치 검증 단계 건너뛰기.
+*   **`-fit off`**: 자동 메모리 피팅 로직 비활성화.
 
-### A. 하드웨어 가속 기능 오버라이드
-*   **내용:** Qualcomm 장치 감지 시 불안정한 `f16acc` 및 `coopmat` 지원 플래그를 강제로 `false`로 설정.
-*   **효과:** 드라이버가 처리하지 못하는 고난도 파이프라인 생성을 원천 차단하여 초기화 단계의 크래시 해결.
+### [방법 2] `ggml-vulkan.cpp` 소스 패치 (연산 우회)
+*   **`GGML_OP_SCALE`**: Qualcomm 장치에서 CPU 우회 패치 적용 (수치 오차 방지).
+*   **`GGML_OP_FLASH_ATTN_EXT`**: Qualcomm 장치 가속 제외 (안정성).
+*   **`K-Quants (Q4_K, Q5_K, Q6_K)`**: Qualcomm에서 CPU 우회 (컴파일 오류 방지).
 
-### B. 셰이더 코드 정제
-*   **내용:** 모든 Vulkan 셰이더(`.comp`, `.glsl`)에서 `[[unroll]]` 속성을 제거.
-*   **효과:** 드라이버의 셰이더 컴파일 부담을 줄여 컴파일러 안정성 확보.
+### [방법 3] `src/llama-model.cpp` 소스 패치 (메모리 우회)
+*   **`get_layer_buft_list`**: Adreno GPU 감지 시 레이어 장치를 CPU로 강제 변경.
+*   **결과**: KV 캐시가 RAM에 할당되도록 유도하여 슬롯 초기화 시의 세그폴트 차단 시도.
 
-### C. Aligned 파이프라인 비활성화
-*   **내용:** Qualcomm 장치에서 메모리 정렬 최적화를 사용하는 `aligned` 파이프라인 선택 로직을 강제로 비활성화.
-*   **효과:** 모바일 GPU의 까다로운 UVA(Unified Virtual Addressing) 정렬 요구사항으로 인한 하드웨어 예외(Segfault) 방지.
+### [방법 4] Vulkan 최하단 할당자 패치
+*   **`ggml_backend_vk_buffer_type_alloc_buffer`**: Qualcomm 장치일 경우 Vulkan VRAM 대신 CPU RAM 버퍼를 반환하도록 강제.
 
-### D. `mul_mat_vec` 커널 활용 범위 확장 (핵심 수정)
-*   **내용:** 
-    *   안정성이 검증된 `mul_mat_vec` 커널의 최대 허용 컬럼 수(`mul_mat_vec_max_cols`)를 **8에서 32로 확장**.
-    *   Qualcomm 장치에 한해 `N <= 32`인 경우 불안정한 `mul_mm` 대신 `mul_mat_vec`을 사용하도록 분기 로직 수정.
-*   **효과:** Adreno 660에서 크래시가 발생하던 `N=9..16` 영역을 안정적인 커널 경로로 우회시켜 동작 범위 확대.
+## 4. 최종 실패 원인 요약 (왜 Vulkan이 아직 안되는가?)
+1.  **Gemma 4 구조적 복잡성**: Per-layer Embedding 및 Shared KV 구조에서 발생하는 복잡한 텐서 참조가 Adreno 드라이버의 버그 유발.
+2.  **드라이버 불안정성**: 대규모 연산 그래프 실행 시 드라이버 내부 메모리 오염 발생.
+3.  **잔여 GPU 연산**: 캐시와 주요 연산을 우회했음에도 워밍업 단계의 일부 연산이 여전히 GPU에서 터짐.
 
----
-
-## 3. 테스트 결과
-| 테스트 항목 | 기존 상태 | 현재 상태 | 결과 |
-| :--- | :--- | :--- | :--- |
-| 초기화 및 장치 인식 | 성공 | 성공 | 동일 |
-| 기본 연산 (ADD, RMS_NORM) | 성공 | 성공 | 동일 |
-| `MUL_MAT` (N=1~8) | 성공 | 성공 | 동일 |
-| `MUL_MAT` (N=9~16) | **크래시 (Segfault)** | **성공 (OK)** | **개선됨** |
-| `f16acc` 파이프라인 생성 | **크래시 (ErrorUnknown)** | **성공 (생성 차단)** | **안정화됨** |
-
----
-
-## 4. 향후 과제 및 로드맵
-- [ ] **N > 32 대응:** 프롬프트 처리 성능 향상을 위해 `mul_mat_vec`을 64/128까지 추가 확장하거나, 서브그룹 의존성이 없는 Adreno 전용 `mul_mm` 커널 개발.
-- [ ] **배치 연산(nr > 1) 안정화:** 현재 `N=16`에서 통과하지 못하는 배치 연산 케이스에 대한 정밀 분석 및 튜닝.
-- [ ] **성능 최적화:** 안정성이 확보된 상태에서 Adreno의 특유의 `f16mat2x4` 로드 방식을 안전하게 다시 도입하는 방안 검토.
-
----
-*참조: 상세 수정 코드는 `ggml/src/ggml-vulkan/ggml-vulkan.cpp` 내 `VK_VENDOR_ID_QUALCOMM` 분기문을 참조하십시오.*
+## 5. 향후 재시도 시 가이드라인
+*   **드라이버**: Mesa-Turnip 드라이버(오픈소스)로 교체 권장.
+*   **정밀도**: 모든 연산을 FP32로 강제하는 패치 검토.
+*   **아키텍처 제어**: `gemma4` 아키텍처 자체를 Qualcomm GPU 가속 대상에서 조건부 제외.
