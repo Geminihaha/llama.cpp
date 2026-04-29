@@ -743,7 +743,8 @@ void process_shaders() {
     string_to_spv("norm_f32", "norm.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}}));
     string_to_spv("group_norm_f32", "group_norm.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}}));
     string_to_spv("rms_norm_f32", "rms_norm.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}}));
-    string_to_spv("rms_norm_partials_f32", "rms_norm_partials.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}}));
+    string_to_spv("rms_norm_partials_f32", "rms_norm_partials.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"USE_SUBGROUP_ADD", "0"}}));
+    string_to_spv("rms_norm_partials_f32_subgroup", "rms_norm_partials.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"USE_SUBGROUP_ADD", "1"}}));
     string_to_spv("rms_norm_mul_rope_f32_f32", "rms_norm.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"ROPE_D_TYPE", "float"}, {"RMS_NORM_ROPE_FUSION", "1"}}));
     string_to_spv("rms_norm_mul_rope_f32_f16", "rms_norm.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"ROPE_D_TYPE", "float16_t"}, {"RMS_NORM_ROPE_FUSION", "1"}}));
     string_to_spv("rms_norm_back_f32", "rms_norm_back.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}}));
@@ -794,7 +795,8 @@ void process_shaders() {
         auto source = op == "add_rms" ? std::string("add") : op;
         auto name = op + get_suffix(src0_f16, src1_f16, dst_f16);
         auto add_rms = op == "add_rms" ? "1" : "0";
-        string_to_spv(name.c_str(), source + ".comp", {{"A_TYPE", get_type_str(src0_f16)}, {"B_TYPE", get_type_str(src1_f16)}, {"D_TYPE", get_type_str(dst_f16)}, {"FLOAT_TYPE", "float"}, {"ADD_RMS" , add_rms}});
+        string_to_spv(name.c_str(), source + ".comp", {{"A_TYPE", get_type_str(src0_f16)}, {"B_TYPE", get_type_str(src1_f16)}, {"D_TYPE", get_type_str(dst_f16)}, {"FLOAT_TYPE", "float"}, {"ADD_RMS" , add_rms}, {"USE_SUBGROUP_ADD", "0"}});
+        string_to_spv((name + "_subgroup").c_str(), source + ".comp", {{"A_TYPE", get_type_str(src0_f16)}, {"B_TYPE", get_type_str(src1_f16)}, {"D_TYPE", get_type_str(dst_f16)}, {"FLOAT_TYPE", "float"}, {"ADD_RMS" , add_rms}, {"USE_SUBGROUP_ADD", "1"}});
     }
     }
     }
@@ -954,9 +956,12 @@ void process_shaders() {
     string_to_spv("argmax_f32", "argmax.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "int"}}));
     string_to_spv("sum_rows_f32", "sum_rows.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}}));
     string_to_spv("count_equal_i32", "count_equal.comp", merge_maps(base_dict, {{"A_TYPE", "int"}, {"B_TYPE", "int"}, {"D_TYPE", "int"}}));
-    string_to_spv("cumsum_f32", "cumsum.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}}));
-    string_to_spv("cumsum_multipass1_f32", "cumsum_multipass1.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}}));
-    string_to_spv("cumsum_multipass2_f32", "cumsum_multipass2.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}}));
+    string_to_spv("cumsum_f32", "cumsum.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}, {"USE_SUBGROUP_ADD", "0"}}));
+    string_to_spv("cumsum_f32_subgroup", "cumsum.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}, {"USE_SUBGROUP_ADD", "1"}}));
+    string_to_spv("cumsum_multipass1_f32", "cumsum_multipass1.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}, {"USE_SUBGROUP_ADD", "0"}}));
+    string_to_spv("cumsum_multipass1_f32_subgroup", "cumsum_multipass1.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}, {"USE_SUBGROUP_ADD", "1"}}));
+    string_to_spv("cumsum_multipass2_f32", "cumsum_multipass2.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}, {"USE_SUBGROUP_ADD", "0"}}));
+    string_to_spv("cumsum_multipass2_f32_subgroup", "cumsum_multipass2.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}, {"USE_SUBGROUP_ADD", "1"}}));
 
     string_to_spv("count_experts", "count_experts.comp", merge_maps(base_dict, {{"A_TYPE", "uint"}, {"D_TYPE", "uint"}}));
 
@@ -1018,8 +1023,10 @@ void process_shaders() {
 
     string_to_spv("add_id_f32", "add_id.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}}));
 
-    string_to_spv("multi_add_f32", "multi_add.comp", {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}, {"ADD_RMS" , "0"}});
-    string_to_spv("multi_add_rms_f32", "multi_add.comp", {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}, {"ADD_RMS" , "1"}});
+    string_to_spv("multi_add_f32", "multi_add.comp", {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}, {"ADD_RMS" , "0"}, {"USE_SUBGROUP_ADD", "0"}});
+    string_to_spv("multi_add_f32_subgroup", "multi_add.comp", {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}, {"ADD_RMS" , "0"}, {"USE_SUBGROUP_ADD", "1"}});
+    string_to_spv("multi_add_rms_f32", "multi_add.comp", {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}, {"ADD_RMS" , "1"}, {"USE_SUBGROUP_ADD", "0"}});
+    string_to_spv("multi_add_rms_f32_subgroup", "multi_add.comp", {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}, {"ADD_RMS" , "1"}, {"USE_SUBGROUP_ADD", "1"}});
 
     string_to_spv("ssm_scan_f32",          "ssm_scan.comp", {{"A_TYPE", "float"}});
     string_to_spv("ssm_scan_subgroup_f32", "ssm_scan.comp", {{"A_TYPE", "float"}, {"USE_SUBGROUP_ADD", "1"}});
@@ -1072,8 +1079,8 @@ void write_output_files() {
 
     std::string suffixes[2] = {"_f32", "_f16"};
     for (std::string op : {"add", "sub", "mul", "div", "add_rms"}) {
-        hdr << "extern const void * " << op << "_data[2][2][2];\n";
-        hdr << "extern const uint64_t " << op << "_len[2][2][2];\n";
+        hdr << "extern const void * " << op << "_data[2][2][2][2];\n";
+        hdr << "extern const uint64_t " << op << "_len[2][2][2][2];\n";
 
         std::string op_file = op == "add_rms" ? "add.comp" : std::string(op) + ".comp";
         if (basename(input_filepath) != op_file) {
@@ -1081,8 +1088,8 @@ void write_output_files() {
         }
         std::stringstream data = make_generic_stringstream();
         std::stringstream len  = make_generic_stringstream();
-        data << "const void * " << op << "_data[2][2][2] = ";
-        len  << "const uint64_t " << op << "_len[2][2][2] = ";
+        data << "const void * " << op << "_data[2][2][2][2] = ";
+        len  << "const uint64_t " << op << "_len[2][2][2][2] = ";
         for (uint32_t t0 = 0; t0 < 2; ++t0) {
             if (t0 == 0) {
                 data << "{";
@@ -1098,10 +1105,21 @@ void write_output_files() {
                         data << "{";
                         len  << "{";
                     }
-                    data << op << suffixes[t0] << suffixes[t1] << suffixes[t2];
-                    len  << op << suffixes[t0] << suffixes[t1] << suffixes[t2];
-                    data << "_data,";
-                    len  << "_len,";
+                    for (uint32_t s = 0; s < 2; ++s) {
+                        if (s == 0) {
+                            data << "{";
+                            len  << "{";
+                        }
+                        std::string s_suffix = s == 1 ? "_subgroup" : "";
+                        data << op << suffixes[t0] << suffixes[t1] << suffixes[t2] << s_suffix;
+                        len  << op << suffixes[t0] << suffixes[t1] << suffixes[t2] << s_suffix;
+                        data << "_data,";
+                        len  << "_len,";
+                        if (s == 1) {
+                            data << "}, ";
+                            len  << "}, ";
+                        }
+                    }
                     if (t2 == 1) {
                         data << "}, ";
                         len  << "}, ";

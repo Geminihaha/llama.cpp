@@ -1,7 +1,7 @@
 #version 450
 
 #extension GL_EXT_shader_16bit_storage : require
-#if ADD_RMS
+#if ADD_RMS && USE_SUBGROUP_ADD
 #extension GL_KHR_shader_subgroup_arithmetic : enable
 #extension GL_KHR_shader_subgroup_basic : enable
 #endif
@@ -9,7 +9,7 @@
 #include "types.glsl"
 #include "generic_binary_head.glsl"
 
-const uint num_threads = 256;
+#define num_threads 512
 
 layout (binding = 3, std430) buffer PartialBuf {float partial_sums[];};
 
@@ -21,11 +21,12 @@ shared FLOAT_TYPE sumsh[num_threads];
 #endif
 
 void main() {
+    const uint tid = gl_LocalInvocationID.x;
     uint idx = get_idx();
     uint orig_idx = idx;
 
     // num_threads * num_iter must equal 512, to match the wg_denoms and get_idx calculation
-    const uint num_iter = 2;
+    const uint num_iter = 1;
 
     FLOAT_TYPE sum_sq = 0;
 
@@ -47,7 +48,8 @@ void main() {
 #if ADD_RMS
     if (p.param3 != 0) {
         // reduce the sum within each subgroup, then across subgroups
-        const uint NumSubgroups = num_threads / gl_SubgroupSize;
+#if USE_SUBGROUP_ADD
+        uint NumSubgroups = num_threads / gl_SubgroupSize;
         sum_sq = subgroupAdd(sum_sq);
         if (gl_SubgroupInvocationID == 0) {
             sumsh[gl_SubgroupID] = sum_sq;
@@ -60,10 +62,26 @@ void main() {
             }
             barrier();
         }
+        sum_sq = sumsh[0];
 
         if (gl_SubgroupID == 0 && gl_SubgroupInvocationID == 0) {
             partial_sums[orig_idx / (num_iter * num_threads)] = sum_sq;
         }
+#else
+        sumsh[tid] = sum_sq;
+        barrier();
+         for (uint s = num_threads / 2; s > 0; s >>= 1) {
+            if (tid < s) {
+                sumsh[tid] += sumsh[tid + s];
+            }
+            barrier();
+        }
+        sum_sq = sumsh[0];
+
+        if (tid == 0) {
+            partial_sums[orig_idx / (num_iter * num_threads)] = sum_sq;
+        }
+#endif
     }
 #endif
 }

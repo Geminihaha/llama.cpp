@@ -4,8 +4,10 @@
 #include "sum_rows.glsl"
 
 #extension GL_EXT_control_flow_attributes : enable
+#if USE_SUBGROUP_ADD
 #extension GL_KHR_shader_subgroup_arithmetic : enable
 #extension GL_KHR_shader_subgroup_basic : enable
+#endif
 
 layout(local_size_x_id = 0, local_size_y = 1, local_size_z = 1) in;
 
@@ -48,15 +50,29 @@ void main() {
         c += BLOCK_SIZE;
     }
 
+#if USE_SUBGROUP_ADD
     sum = subgroupAdd(sum);
     if (gl_SubgroupInvocationID == 0) {
         temp[gl_SubgroupID] = sum;
     }
     barrier();
     sum = 0;
-     for (uint s = 0; s < BLOCK_SIZE / SUBGROUP_SIZE; ++s) {
+     for (uint s = 0; s < gl_NumSubgroups; ++s) {
         sum += temp[s];
     }
+#else
+    temp[tid] = sum;
+    barrier();
+    if (tid == 0) {
+        sum = 0;
+        for (uint s = 0; s < BLOCK_SIZE; ++s) {
+            sum += temp[s];
+        }
+        temp[0] = sum;
+    }
+    barrier();
+    sum = temp[0];
+#endif
 
     // Add the sum to what the first pass computed
     if (col < p.n_cols) {

@@ -3,7 +3,7 @@
 #extension GL_EXT_shader_16bit_storage : require
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_EXT_control_flow_attributes : require
-#if ADD_RMS
+#if ADD_RMS && USE_SUBGROUP_ADD
 #extension GL_KHR_shader_subgroup_arithmetic : enable
 #extension GL_KHR_shader_subgroup_basic : enable
 #endif
@@ -132,7 +132,7 @@ uint get_idx() {
     return gl_GlobalInvocationID.z * 262144 + gl_GlobalInvocationID.y * 512 + gl_GlobalInvocationID.x;
 }
 
-const uint num_threads = 256;
+#define num_threads 512
 
 layout(local_size_x = num_threads, local_size_y = 1, local_size_z = 1) in;
 
@@ -142,13 +142,14 @@ shared FLOAT_TYPE sumsh[num_threads];
 #endif
 
 void main() {
+    const uint tid = gl_LocalInvocationID.x;
     uint idx = get_idx();
     uint orig_idx = idx;
 
     uint ne = p.ne20 * p.ne21 * p.ne22 * p.ne23;
 
     // num_threads * num_iter must equal 512, to match the wg_denoms and get_idx calculation
-    const uint num_iter = 2;
+    const uint num_iter = 1;
 
     FLOAT_TYPE sum_sq = 0;
 
@@ -172,7 +173,8 @@ void main() {
 #if ADD_RMS
     if (p.rms_partials != 0) {
         // reduce the sum within each subgroup, then across subgroups
-        const uint NumSubgroups = num_threads / gl_SubgroupSize;
+#if USE_SUBGROUP_ADD
+        uint NumSubgroups = num_threads / gl_SubgroupSize;
         sum_sq = subgroupAdd(sum_sq);
         if (gl_SubgroupInvocationID == 0) {
             sumsh[gl_SubgroupID] = sum_sq;
@@ -185,10 +187,26 @@ void main() {
             }
             barrier();
         }
+        sum_sq = sumsh[0];
 
         if (gl_SubgroupID == 0 && gl_SubgroupInvocationID == 0) {
             store_partial(num_srcs + 1, orig_idx / (num_iter * num_threads), sum_sq);
         }
+#else
+        sumsh[tid] = sum_sq;
+        barrier();
+         for (uint s = num_threads / 2; s > 0; s >>= 1) {
+            if (tid < s) {
+                sumsh[tid] += sumsh[tid + s];
+            }
+            barrier();
+        }
+        sum_sq = sumsh[0];
+
+        if (tid == 0) {
+            store_partial(num_srcs + 1, orig_idx / (num_iter * num_threads), sum_sq);
+        }
+#endif
     }
 #endif
 }

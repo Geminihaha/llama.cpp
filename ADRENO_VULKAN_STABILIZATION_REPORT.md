@@ -10,33 +10,27 @@
 | :--- | :--- | :--- |
 | **수치 오류 (`avg_err`)** | `SCALE` 연산 (node_49) | Adreno 드라이버의 FP16/FP32 정밀도 타협 및 IEEE-754 미준수. |
 | **Pipeline Creation Failed** | `Q4_K` 행렬 연산 커널 컴파일 | Adreno 드라이버의 레지스터(Register) 부족 혹은 셰이더 복잡도 한계. |
-| **Segmentation Fault** | 프롬프트 처리 중 (70~94%) | Gemma 4/3n의 **Shared KV layers** 및 **ISWA** 로직이 Vulkan Buffer View와 충돌. |
+| **Segmentation Fault** | 프롬프트 처리 중 (70~94%) | 1) 호스트 디스패치(512)와 셰이더 스레드(128/256) 불일치로 인한 메모리 오염. 2) `Q4_0` 양자화 경로의 드라이버 충돌. |
 | **ggml_abort** | `initializing slots` 단계 | Vulkan VRAM 할당 및 동기화 과정에서 드라이버 내부 메모리 관리 오류. |
 
-## 3. 시도했던 방법 및 패치 내역
+## 3. 주요 수정 사항 (2026-04-29)
 
-### [방법 1] 런타임 옵션 조정
-*   **`-b 1`**: 배치 사이즈를 최소화하여 메모리 압박 완화 시도.
-*   **`-fa off`**: 불안정한 Flash Attention 커널 비활성화.
-*   **`--no-warmup`**: 초기 수치 검증 단계 건너뛰기.
-*   **`-fit off`**: 자동 메모리 피팅 로직 비활성화.
+### 3.1. 셰이더 스레드 불일치 해결
+*   **문제:** 호스트(`ggml-vulkan.cpp`)는 512 스레드 단위로 디스패치하나, 일부 셰이더(`add.comp`, `scale.comp`)가 128/256 스레드로 작성되어 메모리 접근 충돌 및 드라이버 크래시 발생.
+*   **해결:** 주요 셰이더의 `local_size_x`를 512로 통일하고 루프 구조 수정.
 
-### [방법 2] `ggml-vulkan.cpp` 소스 패치 (연산 우회)
-*   **`GGML_OP_SCALE`**: Qualcomm 장치에서 CPU 우회 패치 적용 (수치 오차 방지).
-*   **`GGML_OP_FLASH_ATTN_EXT`**: Qualcomm 장치 가속 제외 (안정성).
-*   **`K-Quants (Q4_K, Q5_K, Q6_K)`**: Qualcomm에서 CPU 우회 (컴파일 오류 방지).
+### 3.2. Qualcomm 전용 바이패스 전략 강화
+*   **SCALE/CUMSUM 제외:** 드라이버 수준의 수치 오류 및 불안정성이 확인된 `SCALE` 및 `CUMSUM` 연산을 Qualcomm 장치에서 GPU 가속 대상에서 제외 (CPU로 처리).
+*   **FUSION 비활성화:** `ADD` + `RMS_NORM` 융합 최적화(`add_rms_fusion`)가 Adreno에서 불안정하여 명시적으로 비활성화.
 
-### [방법 3] `src/llama-model.cpp` 소스 패치 (메모리 우회)
-*   **`get_layer_buft_list`**: Adreno GPU 감지 시 레이어 장치를 CPU로 강제 변경.
-*   **결과**: KV 캐시가 RAM에 할당되도록 유도하여 슬롯 초기화 시의 세그폴트 차단 시도.
-
-### [방법 4] Vulkan 최하단 할당자 패치
-*   **`ggml_backend_vk_buffer_type_alloc_buffer`**: Qualcomm 장치일 경우 Vulkan VRAM 대신 CPU RAM 버퍼를 반환하도록 강제.
+### 3.3. 양자화 방식에 따른 안정성 차이 발견
+*   **현상:** `Q4_K_M` 양자화 모델은 Vulkan 가속 시 비교적 안정적으로 동작하나, `Q4_0` 양자화 모델 사용 시 특정 레이어에서 Segmentation Fault가 빈번하게 발생.
+*   **분석:** `Q4_0` 연산 시 사용되는 셰이더 경로(또는 메모리 레이아웃)가 Adreno 드라이버의 특정 제약 조건과 충돌하는 것으로 추정. 향후 `Q4_0` 관련 셰이더의 정밀 분석 필요.
 
 ## 4. 최종 실패 원인 요약 (왜 Vulkan이 아직 안되는가?)
 1.  **Gemma 4 구조적 복잡성**: Per-layer Embedding 및 Shared KV 구조에서 발생하는 복잡한 텐서 참조가 Adreno 드라이버의 버그 유발.
 2.  **드라이버 불안정성**: 대규모 연산 그래프 실행 시 드라이버 내부 메모리 오염 발생.
-3.  **잔여 GPU 연산**: 캐시와 주요 연산을 우회했음에도 워밍업 단계의 일부 연산이 여전히 GPU에서 터짐.
+3.  **양자화 민감도**: `Q4_0`와 같이 단순한 양자화 방식조차 특정 하드웨어 환경에서 세그폴트를 유발할 정도로 드라이버가 민감함.
 
 ## 5. 향후 재시도 시 가이드라인
 *   **드라이버**: Mesa-Turnip 드라이버(오픈소스)로 교체 권장.

@@ -4,8 +4,10 @@
 #include "sum_rows.glsl"
 
 #extension GL_EXT_control_flow_attributes : enable
+#if USE_SUBGROUP_ADD
 #extension GL_KHR_shader_subgroup_arithmetic : enable
 #extension GL_KHR_shader_subgroup_basic : enable
+#endif
 
 layout(local_size_x_id = 0, local_size_y = 1, local_size_z = 1) in;
 
@@ -19,6 +21,7 @@ layout (constant_id = 1) const uint SUBGROUP_SIZE = 32;
 #define CEIL_DIV(a, b) (((a) + (b) - 1) / (b))
 
 shared FLOAT_TYPE partial[BLOCK_SIZE / SUBGROUP_SIZE];
+shared FLOAT_TYPE scan_sh[BLOCK_SIZE];
 
 void main() {
     const uint row = gl_WorkGroupID.y;
@@ -39,6 +42,8 @@ void main() {
     if (col < p.n_cols) {
         v = FLOAT_TYPE(data_a[src_idx + col]);
     }
+
+#if USE_SUBGROUP_ADD
     v = subgroupInclusiveAdd(v);
 
     // Store the largest partial sum for each subgroup, then add the partials for all
@@ -46,6 +51,18 @@ void main() {
     if (gl_SubgroupInvocationID == SUBGROUP_SIZE - 1) {
         partial[subgroup_id] = v;
     }
+#else
+    scan_sh[tid] = v;
+    barrier();
+    v = 0;
+    for (uint s = subgroup_id * SUBGROUP_SIZE; s <= tid; ++s) {
+        v += scan_sh[s];
+    }
+    barrier();
+    if (tid % SUBGROUP_SIZE == SUBGROUP_SIZE - 1) {
+        partial[subgroup_id] = v;
+    }
+#endif
     barrier();
     for (int j = 0; j < subgroup_id; ++j) {
         v += partial[j];

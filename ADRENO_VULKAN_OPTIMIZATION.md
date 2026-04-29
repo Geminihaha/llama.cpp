@@ -42,7 +42,9 @@
 - [x] `ggml-vulkan.cpp`: Adreno GPU에서 비동기 연산 비활성화 및 UMA 강제 적용
 - [x] `ggml-vulkan.cpp`: Adreno GPU에서 `buffer_device_address` 비활성화 (Segmentation Fault 방지)
 - [x] `vulkan-shaders`: `scale.comp` 수치 오류 수정을 위한 셰이더 단순화
-- [ ] `vulkan-shaders`: Adreno 6xx용 `subgroup` 연산 fallback (Shared Memory 활용) 구현
+- [x] `vulkan-shaders`: Adreno 6xx용 `subgroup` 연산 fallback (Shared Memory 활용) 구현
+- [x] `vulkan-shaders`: 호스트 디스패치 크기(512)와 셰이더 스레드 수 동기화 (Segfault 방지)
+- [x] `ggml-vulkan.cpp`: 특정 불안정 연산 (SCALE, CUMSUM) 및 최적화(ADD_RMS_FUSION) Qualcomm 바이패스 적용
 - [ ] `ggml-vulkan.cpp`: Adreno 맞춤형 Local Work Size (LWS) 자동 튜닝 로직
 
 ---
