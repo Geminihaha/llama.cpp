@@ -26,10 +26,19 @@
 *   **RMS Norm:** 제곱 합 계산 수식 보정.
 *   **컴파일 규격:** `local` 메모리 선언 위치를 함수 스코프로 이동하여 OpenCL C 표준 준수.
 
+### D. Qualcomm 특화 Extension 활성화
+*   **대상:** `cl_qcom_dot_product8`, `cl_qcom_large_buffer`
+*   **내용:** 
+    *   Adreno GPU에서 하드웨어 점적 연산(Dot Product) 가속을 위해 `cl_qcom_dot_product8` 확장 기능을 탐지하고 커널 빌드 시 활성화.
+    *   `-DGGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8` 매크로를 통해 커널 내에서 조건부 사용 가능하도록 구성.
+*   **결과:** 하드웨어 가속 유닛 활용 준비 완료.
+
 ---
 
 ## 3. 구현 체크리스트
 - [x] `ggml-opencl.cpp` 내 커널 컴파일 옵션에 매크로 추가
+- [x] `cl_qcom_dot_product8` 탐지 및 활성화 로직 추가
+- [x] 주요 Q8_0 커널(`gemv_noshuffle`, `mul_mv`)에 Extension 프라그마 추가
 - [x] `rms_norm.cl`: Subgroup 우회 및 수식 교정
 - [x] `mean.cl`: Adreno 6xx용 로컬 메모리 Reduction
 - [x] `sum_rows.cl`: Adreno 6xx용 로컬 메모리 Reduction

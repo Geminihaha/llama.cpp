@@ -1,5 +1,9 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
+#ifdef GGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8
+#pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
+#endif
+
 // 16-bit transpose, loading/storing a 4x4 tile of elements
 kernel void kernel_transpose_16(
     __read_only image1d_buffer_t input,

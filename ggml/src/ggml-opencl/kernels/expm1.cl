@@ -1,5 +1,9 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
+#ifdef GGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8
+#pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
+#endif
+
 //------------------------------------------------------------------------------
 // expm1
 //------------------------------------------------------------------------------

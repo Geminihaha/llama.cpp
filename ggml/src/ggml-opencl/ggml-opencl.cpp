@@ -403,6 +403,7 @@ struct ggml_backend_opencl_context {
     bool disable_fusion;
 
     bool adreno_has_large_buffer;
+    bool adreno_has_dot_product8;
     bool adreno_use_large_buffer;
     ggml_cl_compiler_version adreno_cl_compiler_version;
 
@@ -836,6 +837,10 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx, ggml_cl_ve
 
     if (backend_ctx->adreno_use_large_buffer) {
         compile_opts += " -qcom-enable-large-buffer ";
+    }
+
+    if (backend_ctx->adreno_has_dot_product8) {
+        compile_opts += " -DGGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8 ";
     }
 
     GGML_LOG_INFO("ggml_opencl: loading OpenCL kernels");
@@ -3477,6 +3482,9 @@ static ggml_backend_opencl_context * ggml_cl2_init(ggml_backend_dev_t dev) {
     GGML_LOG_INFO("ggml_opencl: device FP16 support: %s\n", backend_ctx->fp16_support ? "true" : "false");
     // check Adreno large buffer support
     backend_ctx->adreno_has_large_buffer = strstr(ext_buffer, "cl_qcom_large_buffer") != NULL;
+    // check Adreno dot product support
+    backend_ctx->adreno_has_dot_product8 = strstr(ext_buffer, "cl_qcom_dot_product8") != NULL;
+    GGML_LOG_INFO("ggml_opencl: device dot product 8 support: %s\n", backend_ctx->adreno_has_dot_product8 ? "true" : "false");
 
     // fp16 is required
     if (!backend_ctx->fp16_support) {
