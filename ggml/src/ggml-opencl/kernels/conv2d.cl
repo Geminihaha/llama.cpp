@@ -1,5 +1,9 @@
 #ifdef USE_FP16
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
+
+#ifdef GGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8
+#pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
+#endif
 #define T_FLOAT half
 #define T_FLOAT4 half4
 #define VSTORE_T_FLOAT4(data, offset, p) vstore_half4_rte(data, offset, p)

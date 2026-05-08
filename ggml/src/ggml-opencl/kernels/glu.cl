@@ -1,5 +1,9 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
+#ifdef GGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8
+#pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
+#endif
+
 #define GELU_COEF_A     0.044715f
 #define GELU_QUICK_COEF -1.702f
 #define SQRT_2_OVER_PI  0.79788456080286535587989211986876f
