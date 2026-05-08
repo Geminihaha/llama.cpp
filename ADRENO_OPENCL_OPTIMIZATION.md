@@ -1,0 +1,56 @@
+# llama.cpp Adreno 660 (OpenCL 2.0) 최적화 및 수정 가이드
+
+이 문서는 Qualcomm Adreno 660 GPU 환경에서 OpenCL 2.0을 활용하여 `llama.cpp`의 성능을 극대화하고 호환성 문제를 해결하기 위한 기술적 기록입니다.
+
+## 1. 개발 및 빌드 환경
+*   **Target Device:** Adreno 660 (Snapdragon 888)
+*   **API Support:** OpenCL 2.0 Full Profile (Compiler E031.38.01.08)
+*   **Optimization Strategy:** FP16 Acceleration, Unified Memory utilization, Kernel Stability.
+
+---
+
+## 2. [성공 사항] 안정성 확보 및 기초 최적화
+
+### A. 커널 로딩 및 컴파일 크래시(Segfault) 해결
+*   **해결:** 
+    *   `__OPENCL_VERSION__` 매크로를 활용하여 OpenCL 2.0(Adreno 6xx) 환경에서 Subgroup 기능 대신 안전한 `local memory` 기반 로직을 사용하도록 우회.
+    *   호스트 코드(`ggml-opencl.cpp`)에서 `-DGGML_OPENCL_USE_ADRENO_KERNELS` 매크로를 커널 컴파일러 옵션에 명시적으로 전달.
+*   **결과:** 모든 주요 커널(`rms_norm`, `mean`, `sum_rows`, `cumsum`, `group_norm`) 로딩 성공.
+
+### B. FP16 (Half Precision) 하드웨어 가속 적용
+*   **대상:** `mul_mv_q4_k_f32.cl`, `mul_mv_f16_f16.cl`, `mul_mv_q8_0_f32.cl`, `mul_mv_q6_k_f32.cl`
+*   **내용:** 커널 내부 연산 변수를 `float`에서 `half` 타입으로 전환하여 하드웨어 가속 유닛 활성화.
+*   **결과:** 연산 지연 시간(Latency) 감소 및 응답 시작 속도 개선.
+
+### C. 수식 및 문법 오류 교정
+*   **RMS Norm:** 제곱 합 계산 수식 보정.
+*   **컴파일 규격:** `local` 메모리 선언 위치를 함수 스코프로 이동하여 OpenCL C 표준 준수.
+
+### D. Qualcomm 특화 Extension 활성화
+*   **대상:** `cl_qcom_dot_product8`, `cl_qcom_large_buffer`
+*   **내용:** 
+    *   Adreno GPU에서 하드웨어 점적 연산(Dot Product) 가속을 위해 `cl_qcom_dot_product8` 확장 기능을 탐지하고 커널 빌드 시 활성화.
+    *   `-DGGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8` 매크로를 통해 커널 내에서 조건부 사용 가능하도록 구성.
+*   **결과:** 하드웨어 가속 유닛 활용 준비 완료.
+
+---
+
+## 3. 구현 체크리스트
+- [x] `ggml-opencl.cpp` 내 커널 컴파일 옵션에 매크로 추가
+- [x] `cl_qcom_dot_product8` 탐지 및 활성화 로직 추가
+- [x] 주요 Q8_0 커널(`gemv_noshuffle`, `mul_mv`)에 Extension 프라그마 추가
+- [x] `rms_norm.cl`: Subgroup 우회 및 수식 교정
+- [x] `mean.cl`: Adreno 6xx용 로컬 메모리 Reduction
+- [x] `sum_rows.cl`: Adreno 6xx용 로컬 메모리 Reduction
+- [x] `cumsum.cl`: Adreno 6xx용 로컬 메모리 Scan
+- [x] `group_norm.cl`: Adreno 6xx용 로컬 메모리 Reduction
+- [x] `mul_mv_q4_k`, `f16_f16`, `q8_0`, `q6_k`: FP16 가속 적용
+
+---
+
+## 4. 향후 작업 로드맵
+- [ ] **Mixed Precision 최적화:** 정확도 영향이 적은 구간 선별 적용.
+- [ ] **안전한 LWS 튜닝:** 커널 인덱싱 로직과 연계된 정밀한 워크그룹 크기 조정.
+- [ ] **GEMM 커널 Tiling 개선:** 프롬프트 처리 성능 최적화.
+
+*주의: 실패 사례 및 상세 분석은 [ADRENO_OPTIMIZATION_FAILURES.md](./ADRENO_OPTIMIZATION_FAILURES.md)를 참조하십시오.*

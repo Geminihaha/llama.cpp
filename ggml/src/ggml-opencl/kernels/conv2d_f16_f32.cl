@@ -1,5 +1,9 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
+#ifdef GGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8
+#pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
+#endif
+
 #if defined(cl_qcom_reqd_sub_group_size)
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size : enable
 #define REQD_SUBGROUP_SIZE_128 __attribute__((qcom_reqd_sub_group_size("full")))

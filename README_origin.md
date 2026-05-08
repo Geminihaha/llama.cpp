@@ -1,45 +1,54 @@
-# llama.cpp (Forked for Android/Termux Optimization)
+# llama.cpp
 
-이 프로젝트는 [ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)를 포크한 저장소입니다.  
-주요 목적은 **Android(Termux)** 환경에서 LLM(Large Language Model)을 효율적으로 구동하기 위한 빌드 최적화 및 성능 테스트입니다.
+![llama](https://user-images.githubusercontent.com/1991296/230134379-7181e485-c521-4d23-a0d6-f7b3b61ba524.png)
 
----
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Release](https://img.shields.io/github/v/release/ggml-org/llama.cpp)](https://github.com/ggml-org/llama.cpp/releases)
+[![Server](https://github.com/ggml-org/llama.cpp/actions/workflows/server.yml/badge.svg)](https://github.com/ggml-org/llama.cpp/actions/workflows/server.yml)
 
-## 📌 출처 및 원본 프로젝트 (Original Source)
+[Manifesto](https://github.com/ggml-org/llama.cpp/discussions/205) / [ggml](https://github.com/ggml-org/ggml) / [ops](https://github.com/ggml-org/llama.cpp/blob/master/docs/ops.md)
 
-모든 핵심 소스 코드와 로직의 저작권은 원본 작성자에게 있습니다. 원본 프로젝트에 대한 상세한 정보와 최신 업데이트는 아래 링크를 참조하세요.
+LLM inference in C/C++
 
-* **Original Repository:** [https://github.com/ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)
-* **Original README:** [View Original Documentation](https://github.com/ggerganov/llama.cpp/blob/master/README.md)
-* **License:** MIT License
+## Recent API changes
 
----
+- [Changelog for `libllama` API](https://github.com/ggml-org/llama.cpp/issues/9289)
+- [Changelog for `llama-server` REST API](https://github.com/ggml-org/llama.cpp/issues/9291)
 
-## 📱 현재 타겟 환경 (Target Environment)
+## Hot topics
 
-본 포크 저장소는 특히 아래의 하드웨어 사양에 최적화된 빌드 환경을 구성하는 데 집중하고 있습니다.
+- **Hugging Face cache migration: models downloaded with `-hf` are now stored in the standard Hugging Face cache directory, enabling sharing with other HF tools.**
+- **[guide : using the new WebUI of llama.cpp](https://github.com/ggml-org/llama.cpp/discussions/16938)**
+- [guide : running gpt-oss with llama.cpp](https://github.com/ggml-org/llama.cpp/discussions/15396)
+- [[FEEDBACK] Better packaging for llama.cpp to support downstream consumers 🤗](https://github.com/ggml-org/llama.cpp/discussions/15313)
+- Support for the `gpt-oss` model with native MXFP4 format has been added | [PR](https://github.com/ggml-org/llama.cpp/pull/15091) | [Collaboration with NVIDIA](https://blogs.nvidia.com/blog/rtx-ai-garage-openai-oss) | [Comment](https://github.com/ggml-org/llama.cpp/discussions/15095)
+- Multimodal support arrived in `llama-server`: [#12898](https://github.com/ggml-org/llama.cpp/pull/12898) | [documentation](./docs/multimodal.md)
+- VS Code extension for FIM completions: https://github.com/ggml-org/llama.vscode
+- Vim/Neovim plugin for FIM completions: https://github.com/ggml-org/llama.vim
+- Hugging Face Inference Endpoints now support GGUF out of the box! https://github.com/ggml-org/llama.cpp/discussions/9669
+- Hugging Face GGUF editor: [discussion](https://github.com/ggml-org/llama.cpp/discussions/9268) | [tool](https://huggingface.co/spaces/CISCai/gguf-editor)
 
-* **Device:** Samsung Galaxy Fold 3
-* **Processor:** Qualcomm Snapdragon 888
-* **GPU:** Adreno 660 (Vulkan / OpenCL 지원 테스트)
-* **Memory:** 12GB RAM
-* **OS:** Android (Termux 환경)
+----
 
----
+## Quick start
 
-## 🛠️ 주요 수정 및 테스트 사항 (Work in Progress)
+Getting started with llama.cpp is straightforward. Here are several ways to install it on your machine:
 
-원본 프로젝트를 바탕으로 다음 항목들을 중점적으로 다룹니다.
+- Install `llama.cpp` using [brew, nix or winget](docs/install.md)
+- Run with Docker - see our [Docker documentation](docs/docker.md)
+- Download pre-built binaries from the [releases page](https://github.com/ggml-org/llama.cpp/releases)
+- Build from source by cloning this repository - check out [our build guide](docs/build.md)
 
-1.  **Build Optimization:** Termux 내에서 CPU 전용, Vulkan 및 OpenCL 백엔드 빌드 시 발생하는 오류 해결.
-2.  **Performance Tuning:** Snapdragon 888의 Adreno GPU를 활용한 추론 속도 최적화.
-3.  **Model Compatibility:** GGUF 형식의 다양한 모델(Gemma, Qwen, Llama 등) 구동 테스트.
+Once installed, you'll need a model to work with. Head to the [Obtaining and quantizing models](#obtaining-and-quantizing-models) section to learn more.
 
----
+Example command:
 
-## 🚀 빠른 시작 (Quick Start)
+```sh
+# Use a local model file
+llama-cli -m my_model.gguf
 
-Termux 환경에서의 기본적인 빌드 절차는 다음과 같습니다 (원본 가이드 준수).
+# Or download and run a model directly from Hugging Face
+llama-cli -hf ggml-org/gemma-3-1b-it-GGUF
 
 # Launch OpenAI-compatible API server
 llama-server -hf ggml-org/gemma-3-1b-it-GGUF
@@ -520,7 +529,6 @@ To learn more about model quantization, [read this documentation](tools/quantize
 - [How to build](docs/build.md)
 - [Running on Docker](docs/docker.md)
 - [Build on Android](docs/android.md)
-- [Multi-GPU usage](docs/multi-gpu.md)
 - [Performance troubleshooting](docs/development/token_generation_performance_tips.md)
 - [GGML tips & tricks](https://github.com/ggml-org/llama.cpp/wiki/GGML-Tips-&-Tricks)
 
@@ -569,7 +577,20 @@ to use a different version by changing the URL and checksum.
 Command-line completion is available for some environments.
 
 #### Bash Completion
-### CPU 전용 빌드
 ```bash
-cmake -B build
-cmake --build build --config Release
+$ build/bin/llama-cli --completion-bash > ~/.llama-completion.bash
+$ source ~/.llama-completion.bash
+```
+Optionally this can be added to your `.bashrc` or `.bash_profile` to load it
+automatically. For example:
+```console
+$ echo "source ~/.llama-completion.bash" >> ~/.bashrc
+```
+
+## Dependencies
+
+- [yhirose/cpp-httplib](https://github.com/yhirose/cpp-httplib) - Single-header HTTP server, used by `llama-server` - MIT license
+- [stb-image](https://github.com/nothings/stb) - Single-header image format decoder, used by multimodal subsystem - Public domain
+- [nlohmann/json](https://github.com/nlohmann/json) - Single-header JSON library, used by various tools/examples - MIT License
+- [miniaudio.h](https://github.com/mackron/miniaudio) - Single-header audio format decoder, used by multimodal subsystem - Public domain
+- [subprocess.h](https://github.com/sheredom/subprocess.h) - Single-header process launching solution for C and C++ - Public domain
