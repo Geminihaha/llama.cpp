@@ -499,6 +499,7 @@ task_params server_task::params_from_json_cmpl(
         const auto end_tag   = json_value(data, "reasoning_budget_end_tag", std::string());
         const auto message   = json_value(data, "reasoning_budget_message", std::string());
         params.sampling.reasoning_budget_tokens = budget;
+        params.sampling.reasoning_control = json_value(data, "reasoning_control", false);
 
         if (!start_tag.empty()) {
             params.sampling.reasoning_budget_start = common_tokenize(vocab, start_tag, false, true);
@@ -604,7 +605,7 @@ task_params server_task::params_from_json_cmpl(
         const auto samplers = data.find("samplers");
         if (samplers != data.end()) {
             if (samplers->is_array()) {
-                params.sampling.samplers = common_sampler_types_from_names(*samplers, false);
+                params.sampling.samplers = common_sampler_types_from_names(*samplers);
             } else if (samplers->is_string()){
                 params.sampling.samplers = common_sampler_types_from_chars(samplers->get<std::string>());
             }
