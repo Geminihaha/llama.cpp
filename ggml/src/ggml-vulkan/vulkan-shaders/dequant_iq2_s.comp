@@ -25,7 +25,7 @@ void main() {
     const vec2 db = d * (0.5 + scale) * 0.25;
 
     uint qh = data_a[ib].qh[ib32];
-    [[unroll]] for (uint l = 0; l < 4; ++l) {
+     for (uint l = 0; l < 4; ++l) {
         uint qs = data_a[ib].qs[4 * ib32 + l];
         const uint8_t sign = data_a[ib].qs[QUANT_K / 8 + 4 * ib32 + l];
         qs |= (qh << (8 - 2 * l)) & 0x300;

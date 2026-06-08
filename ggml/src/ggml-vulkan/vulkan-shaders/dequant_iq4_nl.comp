@@ -25,7 +25,7 @@ void main() {
 
     const float d = float(data_a[ib].d);
 
-    [[unroll]] for (uint l = 0; l < 8; ++l) {
+     for (uint l = 0; l < 8; ++l) {
         data_b[b_idx + l +  0] = D_TYPE(d * kvalues_iq4nl[data_a[ib].qs[q_idx + l] & 0xF]);
         data_b[b_idx + l + 16] = D_TYPE(d * kvalues_iq4nl[data_a[ib].qs[q_idx + l] >>  4]);
     }

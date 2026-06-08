@@ -27,17 +27,17 @@ void main() {
     if (idx + 3 < p.ne && (p.ne % 4) == 0) {
         vec4 result = vec4(0.0f);
 
-        [[unroll]] for (uint i = 0; i < p.k_num; i++) {
+         for (uint i = 0; i < p.k_num; i++) {
             result += data_a4[(i * p.ne + idx) / 4];
         }
 
         data_d4[idx / 4] = result;
     } else {
-        [[unroll]] for (uint j = 0; j < 4; ++j) {
+         for (uint j = 0; j < 4; ++j) {
             if (idx + j < p.ne) {
                 float result = 0.0f;
 
-                [[unroll]] for (uint i = 0; i < p.k_num; i++) {
+                 for (uint i = 0; i < p.k_num; i++) {
                     result += data_a[i * p.ne + idx + j];
                 }
 

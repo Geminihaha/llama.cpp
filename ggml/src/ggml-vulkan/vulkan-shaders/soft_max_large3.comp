@@ -25,7 +25,7 @@ void main() {
     FLOAT_TYPE max_val = p.has_sinks == 0 ? uintBitsToFloat(0xFF800000) : data_c[i02];
     FLOAT_TYPE sum = FLOAT_TYPE(0.0f);
 
-    [[unroll]] for (uint i = 0; i < gl_NumWorkGroups.x; i += BLOCK_SIZE) {
+     for (uint i = 0; i < gl_NumWorkGroups.x; i += BLOCK_SIZE) {
         if (i + tid < gl_NumWorkGroups.x) {
             max_val = max(max_val, data_m[rowx * gl_NumWorkGroups.x + i + tid]);
             sum += data_s[rowx * gl_NumWorkGroups.x + i + tid];
@@ -36,7 +36,7 @@ void main() {
     vals[tid] = max_val;
     sumsh[tid] = sum;
     barrier();
-    [[unroll]] for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+     for (uint s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
             vals[tid] = max(max_val, vals[tid + s]);
             sumsh[tid] += sumsh[tid + s];
@@ -53,7 +53,7 @@ void main() {
 
     FLOAT_TYPE rcpdivisor = 1.0/sum;
 
-    [[unroll]] for (uint col0 = wg_start, idx = 0; idx < num_iters; col0 += BLOCK_SIZE, ++idx) {
+     for (uint col0 = wg_start, idx = 0; idx < num_iters; col0 += BLOCK_SIZE, ++idx) {
         const uint col = col0 + tid;
 
         if (col >= p.KX) {

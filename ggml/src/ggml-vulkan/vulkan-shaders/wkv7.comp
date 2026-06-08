@@ -37,7 +37,7 @@ void main() {
     }
 
     A_TYPE state[BLOCK_SIZE];
-    [[unroll]] for (uint i = 0; i < head_size; i++) {
+     for (uint i = 0; i < head_size; i++) {
         state[i] = state_in[batch_id * state_size + head_id * head_size * head_size
                           + tid * head_size + i];
     }
@@ -55,7 +55,7 @@ void main() {
         barrier();
 
         A_TYPE sa = 0.0;
-        [[unroll]] for (uint j = 0; j < head_size; j += 4) {
+         for (uint j = 0; j < head_size; j += 4) {
             vec4 s_vec = vec4(state[j], state[j+1], state[j+2], state[j+3]);
             vec4 a_vec = vec4(_a[j], _a[j+1], _a[j+2], _a[j+3]);
             sa += dot(s_vec, a_vec);
@@ -64,7 +64,7 @@ void main() {
         const A_TYPE v_val = v[t];
         A_TYPE y = 0.0;
 
-        [[unroll]] for (uint j = 0; j < head_size; j += 4) {
+         for (uint j = 0; j < head_size; j += 4) {
             vec4 r_vec = vec4(_r[j], _r[j+1], _r[j+2], _r[j+3]);
             vec4 w_vec = vec4(_w[j], _w[j+1], _w[j+2], _w[j+3]);
             vec4 k_vec = vec4(_k[j], _k[j+1], _k[j+2], _k[j+3]);
@@ -84,7 +84,7 @@ void main() {
         dst[t] = y;
     }
 
-    [[unroll]] for (uint i = 0; i < head_size; i++) {
+     for (uint i = 0; i < head_size; i++) {
         dst[T * C + batch_id * state_size + head_id * head_size * head_size
             + tid * head_size + i] = state[i];
     }

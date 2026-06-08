@@ -31,7 +31,7 @@ void main() {
     ));
     const float db = d * (0.5 + (signscale >> 28)) * 0.5;
 
-    [[unroll]] for (uint l = 0; l < 4; ++l) {
+     for (uint l = 0; l < 4; ++l) {
         const uint sign7 = bitfieldExtract(signscale, 7 * int(l), 7);
         // Restore parity bit.
         const uint sign8 = sign7 | (bitCount(sign7) << 7);

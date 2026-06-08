@@ -37,9 +37,9 @@ void argsort(bool needs_bounds_check, const uint row) {
     barrier();
 
     uint num_outer_loop_iters = NCOLS_PADDED_LOG2;
-    [[unroll]] for (uint k = 2, outer_idx = 0; outer_idx < num_outer_loop_iters; k *= 2, outer_idx++) {
+     for (uint k = 2, outer_idx = 0; outer_idx < num_outer_loop_iters; k *= 2, outer_idx++) {
         uint num_inner_loop_iters = outer_idx + 1;
-        [[unroll]] for (uint j = k / 2, inner_idx = 0; inner_idx < num_inner_loop_iters; j /= 2, inner_idx++) {
+         for (uint j = k / 2, inner_idx = 0; inner_idx < num_inner_loop_iters; j /= 2, inner_idx++) {
             const int ixj = int(col ^ j);
 
             int idx_0 = (col & k) == 0 ? col : ixj;

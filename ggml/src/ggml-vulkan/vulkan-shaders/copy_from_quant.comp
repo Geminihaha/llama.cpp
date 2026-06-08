@@ -32,7 +32,7 @@ void main() {
     const uint ib = src_idx;
     const vec2 dm = get_dm(ib, a_offset);
 
-    [[unroll]] for (int j = 0; j < QUANT_K; j += 4) {
+     for (int j = 0; j < QUANT_K; j += 4) {
         vec4 v = dequantize4(ib, j / QUANT_R, a_offset);
         v = v * dm.x + vec4(dm.y);
 

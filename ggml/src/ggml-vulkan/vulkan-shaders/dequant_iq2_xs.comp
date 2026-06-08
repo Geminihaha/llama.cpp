@@ -24,7 +24,7 @@ void main() {
     const vec2 scale = vec2(data_a[ib].scales[ib32] & 0xf, data_a[ib].scales[ib32] >> 4);
     const vec2 db = d * (0.5 + scale) * 0.25;
 
-    [[unroll]] for (uint l = 0; l < 4; ++l) {
+     for (uint l = 0; l < 4; ++l) {
         uint16_t qs = data_a[ib].qs[4 * ib32 + l];
         const uint sign7 = qs >> 9;
         const uint sign8 = sign7 | (bitCount(sign7) << 7); // parity bit

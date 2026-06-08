@@ -284,7 +284,7 @@ class vk_perf_logger;
 static void ggml_vk_destroy_buffer(vk_buffer& buf);
 static void ggml_vk_synchronize(ggml_backend_vk_context * ctx);
 
-static constexpr uint32_t mul_mat_vec_max_cols = 8;
+static constexpr uint32_t mul_mat_vec_max_cols = 32;
 static constexpr uint32_t p021_max_gqa_ratio = 8;
 
 enum vk_device_architecture {
@@ -296,6 +296,7 @@ enum vk_device_architecture {
     INTEL_XE2,
     NVIDIA_PRE_TURING,
     NVIDIA_TURING,
+    QUALCOMM_ADRENO,
 };
 
 static vk_device_architecture get_device_architecture(const vk::PhysicalDevice& device) {
@@ -405,6 +406,10 @@ static vk_device_architecture get_device_architecture(const vk::PhysicalDevice& 
             if (sm_props.shaderWarpsPerSM == 32) {
                 return vk_device_architecture::NVIDIA_TURING;
             }
+        }
+    } else if (props.vendorID == VK_VENDOR_ID_QUALCOMM) {
+        if (strstr(props.deviceName, "Adreno")) {
+            return vk_device_architecture::QUALCOMM_ADRENO;
         }
     }
     return vk_device_architecture::OTHER;
@@ -3814,6 +3819,9 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
     auto const &ggml_vk_create_pipeline = [&](vk_device& device, vk_pipeline& base_pipeline, const char *name, size_t spv_size, const void* spv_data, const char *entrypoint,
                                               uint32_t parameter_count, uint32_t push_constant_size, std::array<uint32_t, 3> wg_denoms, const std::vector<uint32_t>& specialization_constants,
                                               uint32_t align, bool disable_robustness = false, bool require_full_subgroups = false, uint32_t required_subgroup_size = 0) {
+        if (device->vendor_id == VK_VENDOR_ID_QUALCOMM && strstr(name, "f16acc")) {
+            return;
+        }
 
         if (!require_full_subgroups && required_subgroup_size == 0) {
             required_subgroup_size = get_subgroup_size(name, device->architecture);
@@ -4554,10 +4562,14 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
     } else if (device->vendor_id == VK_VENDOR_ID_INTEL) {
         rm_stdq = 2;
         rm_stdq_int = 2;
+    } else if (device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
+        rm_stdq = 2;
+        rm_kq = 4;
+        rm_stdq_int = 2;
     }
     uint32_t rm_iq = 2 * rm_kq;
 
-    const bool use_subgroups = device->subgroup_arithmetic && device->architecture != vk_device_architecture::AMD_GCN;
+    const bool use_subgroups = device->subgroup_arithmetic && device->architecture != vk_device_architecture::AMD_GCN && device->architecture != vk_device_architecture::QUALCOMM_ADRENO;
     // Ensure a subgroup size >= 16 is available
     const bool use_subgroups16 = use_subgroups && subgroup_min_size_16;
 
@@ -4824,8 +4836,8 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
 
     ggml_vk_create_pipeline(device, device->pipeline_rms_norm_f32, "rms_norm_f32", rms_norm_f32_len, rms_norm_f32_data, "main", 4, sizeof(vk_op_binary_push_constants), {1, 1, 1}, {0, 0}, 1, true);
     ggml_vk_create_pipeline(device, device->pipeline_rms_norm_mul_f32, "rms_norm_mul_f32", rms_norm_f32_len, rms_norm_f32_data, "main", 4, sizeof(vk_op_binary_push_constants), {1, 1, 1}, {0, 1}, 1, true);
-    ggml_vk_create_pipeline(device, device->pipeline_rms_norm_partials_f32, "rms_norm_partials_f32", rms_norm_partials_f32_len, rms_norm_partials_f32_data, "main", 4, sizeof(vk_op_binary_push_constants), {1, 1, 1}, {0, 0}, 1, true);
-    ggml_vk_create_pipeline(device, device->pipeline_rms_norm_mul_partials_f32, "rms_norm_mul_partials_f32", rms_norm_partials_f32_len, rms_norm_partials_f32_data, "main", 4, sizeof(vk_op_binary_push_constants), {1, 1, 1}, {0, 1}, 1, true);
+    ggml_vk_create_pipeline(device, device->pipeline_rms_norm_partials_f32, "rms_norm_partials_f32", use_subgroups ? rms_norm_partials_f32_subgroup_len : rms_norm_partials_f32_len, use_subgroups ? rms_norm_partials_f32_subgroup_data : rms_norm_partials_f32_data, "main", 4, sizeof(vk_op_binary_push_constants), {1, 1, 1}, {0, 0}, 1, true);
+    ggml_vk_create_pipeline(device, device->pipeline_rms_norm_mul_partials_f32, "rms_norm_mul_partials_f32", use_subgroups ? rms_norm_partials_f32_subgroup_len : rms_norm_partials_f32_len, use_subgroups ? rms_norm_partials_f32_subgroup_data : rms_norm_partials_f32_data, "main", 4, sizeof(vk_op_binary_push_constants), {1, 1, 1}, {0, 1}, 1, true);
 
     if (sizeof(vk_op_rms_norm_mul_rope_push_constants) <= device->properties.limits.maxPushConstantsSize) {
         ggml_vk_create_pipeline(device, device->pipeline_rms_norm_mul_rope_f32_f32, "rms_norm_mul_rope_f32_f32", rms_norm_mul_rope_f32_f32_len, rms_norm_mul_rope_f32_f32_data, "main", 7, sizeof(vk_op_rms_norm_mul_rope_push_constants), {1, 1, 1}, {0, 1}, 1, true);
@@ -4900,7 +4912,7 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
 #define CREATE_BINARY(name, namemod, spec, bindings) \
     for (int s0 : {0,1}) for (int s1 : {0,1}) for (int d : {0,1}) \
         ggml_vk_create_pipeline2(device, device->pipeline_ ## name ## namemod[s0][s1][d], \
-                                #name + get_suffix(s0, s1, d) + #namemod, name ## _len[s0][s1][d], name ## _data[s0][s1][d], \
+                                #name + get_suffix(s0, s1, d) + #namemod, name ## _len[s0][s1][d][use_subgroups ? 1 : 0], name ## _data[s0][s1][d][use_subgroups ? 1 : 0], \
                                 "main", (bindings), sizeof(vk_op_binary_push_constants), {512, 1, 1}, spec, 1);
 
     CREATE_BINARY(add, , {0}, 4)
@@ -4917,8 +4929,8 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
 
     if (device->multi_add) {
         for (uint32_t i = 0; i < MAX_FUSED_ADDS; ++i) {
-            ggml_vk_create_pipeline2(device, device->pipeline_multi_add[i],     "multi_add_f32_"     + std::to_string(i+1), multi_add_f32_len,     multi_add_f32_data,     "main", MAX_PARAMETER_COUNT, sizeof(vk_op_multi_add_push_constants), {512, 1, 1}, {i+2}, 1);
-            ggml_vk_create_pipeline2(device, device->pipeline_multi_add_rms[i], "multi_add_rms_f32_" + std::to_string(i+1), multi_add_rms_f32_len, multi_add_rms_f32_data, "main", MAX_PARAMETER_COUNT, sizeof(vk_op_multi_add_push_constants), {512, 1, 1}, {i+2}, 1);
+            ggml_vk_create_pipeline2(device, device->pipeline_multi_add[i],     "multi_add_f32_"     + std::to_string(i+1), use_subgroups ? multi_add_f32_subgroup_len : multi_add_f32_len,     use_subgroups ? multi_add_f32_subgroup_data : multi_add_f32_data,     "main", MAX_PARAMETER_COUNT, sizeof(vk_op_multi_add_push_constants), {512, 1, 1}, {i+2}, 1);
+            ggml_vk_create_pipeline2(device, device->pipeline_multi_add_rms[i], "multi_add_rms_f32_" + std::to_string(i+1), use_subgroups ? multi_add_rms_f32_subgroup_len : multi_add_rms_f32_len, use_subgroups ? multi_add_rms_f32_subgroup_data : multi_add_rms_f32_data, "main", MAX_PARAMETER_COUNT, sizeof(vk_op_multi_add_push_constants), {512, 1, 1}, {i+2}, 1);
         }
     }
 
@@ -5084,13 +5096,21 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
             }
             ++idx;
         }
+    } else if (device->driver_id != vk::DriverId::eIntelProprietaryWindows) {
+        // Disabled on Intel Windows due to a driver bug: https://github.com/ggml-org/llama.cpp/pull/23964#issuecomment-4598226147
+        int idx = 0;
+        for (uint32_t n : {64, 128, 256, 512}) {
+            const uint32_t block_size = std::min(device->subgroup_size, n);
+            ggml_vk_create_pipeline(device, device->pipeline_fwht_f32[idx], "fwht_shmem_f32", fwht_shmem_f32_len, fwht_shmem_f32_data, "main", 2, sizeof(vk_op_fwht_push_constants), {1, 1, 1}, { block_size, n }, 1);
+            ++idx;
+        }
     }
 
     const uint32_t cumsum_elem_per_thread = (device->vendor_id == VK_VENDOR_ID_AMD || device->vendor_id == VK_VENDOR_ID_INTEL) ? 2 : 4;
-    ggml_vk_create_pipeline(device, device->pipeline_cumsum_f32,       "cumsum_f32", cumsum_f32_len, cumsum_f32_data, "main", 2, sizeof(vk_op_sum_rows_push_constants), {1, 1, 1}, { 256, device->subgroup_size, cumsum_elem_per_thread }, 1, true, true, device->subgroup_size);
-    ggml_vk_create_pipeline(device, device->pipeline_cumsum_small_f32, "cumsum_f32", cumsum_f32_len, cumsum_f32_data, "main", 2, sizeof(vk_op_sum_rows_push_constants), {1, 1, 1}, { 128, device->subgroup_size, 1 }, 1, true, true, device->subgroup_size);
-    ggml_vk_create_pipeline(device, device->pipeline_cumsum_multipass1_f32, "cumsum_multipass1_f32", cumsum_multipass1_f32_len, cumsum_multipass1_f32_data, "main", 3, sizeof(vk_op_sum_rows_push_constants), {256, 1, 1}, { 256, device->subgroup_size }, 1, true, true, device->subgroup_size);
-    ggml_vk_create_pipeline(device, device->pipeline_cumsum_multipass2_f32, "cumsum_multipass2_f32", cumsum_multipass2_f32_len, cumsum_multipass2_f32_data, "main", 3, sizeof(vk_op_sum_rows_push_constants), {256, 1, 1}, { 256, device->subgroup_size }, 1, true, true, device->subgroup_size);
+    ggml_vk_create_pipeline(device, device->pipeline_cumsum_f32,       "cumsum_f32", use_subgroups ? cumsum_f32_subgroup_len : cumsum_f32_len, use_subgroups ? cumsum_f32_subgroup_data : cumsum_f32_data, "main", 2, sizeof(vk_op_sum_rows_push_constants), {1, 1, 1}, { 256, device->subgroup_size, cumsum_elem_per_thread }, 1, true, true, device->subgroup_size);
+    ggml_vk_create_pipeline(device, device->pipeline_cumsum_small_f32, "cumsum_f32", use_subgroups ? cumsum_f32_subgroup_len : cumsum_f32_len, use_subgroups ? cumsum_f32_subgroup_data : cumsum_f32_data, "main", 2, sizeof(vk_op_sum_rows_push_constants), {1, 1, 1}, { 128, device->subgroup_size, 1 }, 1, true, true, device->subgroup_size);
+    ggml_vk_create_pipeline(device, device->pipeline_cumsum_multipass1_f32, "cumsum_multipass1_f32", use_subgroups ? cumsum_multipass1_f32_subgroup_len : cumsum_multipass1_f32_len, use_subgroups ? cumsum_multipass1_f32_subgroup_data : cumsum_multipass1_f32_data, "main", 3, sizeof(vk_op_sum_rows_push_constants), {256, 1, 1}, { 256, device->subgroup_size }, 1, true, true, device->subgroup_size);
+    ggml_vk_create_pipeline(device, device->pipeline_cumsum_multipass2_f32, "cumsum_multipass2_f32", use_subgroups ? cumsum_multipass2_f32_subgroup_len : cumsum_multipass2_f32_len, use_subgroups ? cumsum_multipass2_f32_subgroup_data : cumsum_multipass2_f32_data, "main", 3, sizeof(vk_op_sum_rows_push_constants), {256, 1, 1}, { 256, device->subgroup_size }, 1, true, true, device->subgroup_size);
 
     ggml_vk_create_pipeline(device, device->pipeline_count_equal_i32, "count_equal_i32", count_equal_i32_len, count_equal_i32_data, "main", 3, sizeof(vk_op_push_constants), {512, 1, 1}, { device->subgroup_size }, 1);
 
@@ -5558,16 +5578,19 @@ static vk_device ggml_vk_get_device(size_t idx) {
         device->vendor_id = device->properties.vendorID;
         device->driver_id = driver_props.driverID;
 
-        if (device->driver_id == vk::DriverId::eMoltenvk) {
+        if (device->driver_id == vk::DriverId::eMoltenvk || device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
             // Disable external_memory_host until https://github.com/KhronosGroup/MoltenVK/pull/2622
             // is available in the Vulkan SDK.
+            // Also disable on Qualcomm Adreno because the driver is known to crash on import.
             device->external_memory_host = false;
         }
 
         // Implementing the async backend interfaces seems broken on older Intel HW,
         // see https://github.com/ggml-org/llama.cpp/issues/17302.
+        // Also disable on Qualcomm Adreno because multi-queue usage is often unstable.
         device->support_async = (device->vendor_id != VK_VENDOR_ID_INTEL ||
                                  std::string(device->properties.deviceName.data()).find("(DG1)") == std::string::npos) &&
+                                 device->vendor_id != VK_VENDOR_ID_QUALCOMM &&
                                 getenv("GGML_VK_DISABLE_ASYNC") == nullptr;
 
         if (!device->support_async) {
@@ -5606,7 +5629,7 @@ static vk_device ggml_vk_get_device(size_t idx) {
 
         device->subgroup_size = subgroup_props.subgroupSize;
         device->subgroup_size_log2 = uint32_t(log2f(float(device->subgroup_size)));
-        device->uma = device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
+        device->uma = device->properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu || device->vendor_id == VK_VENDOR_ID_QUALCOMM;
         if (sm_builtins) {
             device->shader_core_count = sm_props.shaderSMCount;
         } else if (amd_shader_core_properties2) {
@@ -5630,6 +5653,11 @@ static vk_device ggml_vk_get_device(size_t idx) {
 #endif
         device->subgroup_shuffle = (vk11_props.subgroupSupportedStages & vk::ShaderStageFlagBits::eCompute) &&
                                    (vk11_props.subgroupSupportedOperations & vk::SubgroupFeatureFlagBits::eShuffle);
+#ifdef __APPLE__
+        if (device->vendor_id == VK_VENDOR_ID_AMD) {
+            device->subgroup_shuffle = false;
+        }
+#endif
         device->subgroup_clustered = (vk11_props.subgroupSupportedStages & vk::ShaderStageFlagBits::eCompute) &&
                                      (vk11_props.subgroupSupportedOperations & vk::SubgroupFeatureFlagBits::eClustered);
 
@@ -5826,7 +5854,7 @@ static vk_device ggml_vk_get_device(size_t idx) {
                             getenv("GGML_VK_DISABLE_MULTI_ADD") == nullptr;
 
         device->shader_int64 = device_features2.features.shaderInt64;
-        device->buffer_device_address = vk12_features.bufferDeviceAddress;
+        device->buffer_device_address = vk12_features.bufferDeviceAddress && device->vendor_id != VK_VENDOR_ID_QUALCOMM;
         device->vulkan_memory_model = vk12_features.vulkanMemoryModel;
 
         if (device->subgroup_size_control) {
@@ -6193,7 +6221,8 @@ static vk_device ggml_vk_get_device(size_t idx) {
 
         device->add_rms_fusion = !device->disable_fusion &&
                                  device->subgroup_arithmetic &&
-                                 device->vendor_id != VK_VENDOR_ID_INTEL;
+                                 device->vendor_id != VK_VENDOR_ID_INTEL &&
+                                 device->vendor_id != VK_VENDOR_ID_QUALCOMM;
         device->partials_binding_alignment =
             std::max(4u, (uint32_t)device->properties.limits.minStorageBufferOffsetAlignment);
 
@@ -6336,6 +6365,15 @@ static void ggml_vk_print_gpu_info(size_t idx) {
     }
 #endif
 
+#if defined(VK_NV_cooperative_matrix2)
+    VkPhysicalDeviceCooperativeMatrix2FeaturesNV coopmat2_features {};
+    coopmat2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_FEATURES_NV;
+    if (coopmat2_support) {
+        last_struct->pNext = (VkBaseOutStructure *)&coopmat2_features;
+        last_struct = (VkBaseOutStructure *)&coopmat2_features;
+    }
+#endif
+
     VkPhysicalDeviceCooperativeMatrixDecodeVectorFeaturesNV coopmat2_decode_vector_features {};
     coopmat2_decode_vector_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_DECODE_VECTOR_FEATURES_NV;
     if (coopmat2_decode_vector_support) {
@@ -6366,6 +6404,19 @@ static void ggml_vk_print_gpu_info(size_t idx) {
                    && coopmat_features.cooperativeMatrix
 #endif
                    && ggml_vk_khr_cooperative_matrix_support(props2.properties, driver_props, device_architecture);
+
+#if defined(VK_NV_cooperative_matrix2) && defined(GGML_VULKAN_COOPMAT2_GLSLC_SUPPORT)
+    coopmat2_support = coopmat2_support &&
+                       coopmat2_features.cooperativeMatrixWorkgroupScope &&
+                       coopmat2_features.cooperativeMatrixFlexibleDimensions &&
+                       coopmat2_features.cooperativeMatrixReductions &&
+                       coopmat2_features.cooperativeMatrixConversions &&
+                       coopmat2_features.cooperativeMatrixPerElementOperations &&
+                       coopmat2_features.cooperativeMatrixTensorAddressing &&
+                       coopmat2_features.cooperativeMatrixBlockLoads;
+#else
+    coopmat2_support = false;
+#endif
 
     coopmat2_decode_vector_support = coopmat2_decode_vector_support && coopmat2_decode_vector_features.cooperativeMatrixDecodeVector;
 #if !defined(GGML_VULKAN_COOPMAT2_DECODE_VECTOR_GLSLC_SUPPORT)
@@ -6823,7 +6874,6 @@ static vk_pipeline ggml_vk_get_dequantize_mul_mat_vec(ggml_backend_vk_context * 
             case GGML_TYPE_Q5_K:
             case GGML_TYPE_Q6_K:
             case GGML_TYPE_IQ1_S:
-            case GGML_TYPE_IQ1_M:
                 break;
             default:
                 return nullptr;
@@ -6985,7 +7035,6 @@ static vk_pipeline ggml_vk_get_dequantize_mul_mat_vec_id(ggml_backend_vk_context
             case GGML_TYPE_Q5_K:
             case GGML_TYPE_Q6_K:
             case GGML_TYPE_IQ1_S:
-            case GGML_TYPE_IQ1_M:
                 break;
             default:
                 return nullptr;
@@ -9007,7 +9056,7 @@ static void ggml_vk_mul_mat(ggml_backend_vk_context * ctx, vk_context& subctx, c
         ggml_vk_mul_mat_vec_nc_f16_f32(ctx, subctx, cgraph, node_idx);
     // mul_mat_vec supports batching ne12*ne13 when ne11==1, or treating ne11 as the batch size (up to four)
     // when ne12 and ne13 are one.
-    } else if ((dst->ne[1] == 1 || (dst->ne[1] <= mul_mat_vec_max_cols && src1->ne[2] * src1->ne[3] == 1)) &&
+    } else if ((dst->ne[1] == 1 || (dst->ne[1] <= ((ctx->device->vendor_id == VK_VENDOR_ID_QUALCOMM) ? 32 : mul_mat_vec_max_cols) && src1->ne[2] * src1->ne[3] == 1)) &&
                (src0->type == GGML_TYPE_F32 || src0->type == GGML_TYPE_F16 || src0->type == GGML_TYPE_BF16 || ggml_is_quantized(src0->type))) {
         ggml_vk_mul_mat_vec_q_f16(ctx, subctx, cgraph, node_idx);
     } else {
@@ -16361,6 +16410,18 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
     ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)dev->context;
     const vk_device& device = ggml_vk_get_device(ctx->device);
 
+    auto const & is_misaligned = [&](const ggml_tensor * t) {
+        if (t == nullptr) return false;
+        size_t offset = t->view_offs;
+        return (offset & (device->properties.limits.minStorageBufferOffsetAlignment - 1)) != 0;
+    };
+
+    if (device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
+        if (is_misaligned(op) || is_misaligned(op->src[0]) || is_misaligned(op->src[1]) || is_misaligned(op->src[2]) || is_misaligned(op->src[3])) {
+            return false;
+        }
+    }
+
     const bool uses_bda = (op->op == GGML_OP_IM2COL || op->op == GGML_OP_IM2COL_3D) &&
                           device->shader_int64 && device->buffer_device_address;
 
@@ -16452,11 +16513,16 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
                     case GGML_TYPE_Q5_0:
                     case GGML_TYPE_Q5_1:
                     case GGML_TYPE_Q8_0:
+                        break;
                     case GGML_TYPE_Q2_K:
                     case GGML_TYPE_Q3_K:
                     case GGML_TYPE_Q4_K:
                     case GGML_TYPE_Q5_K:
                     case GGML_TYPE_Q6_K:
+                        if (device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
+                            return false;
+                        }
+                        break;
                     case GGML_TYPE_IQ1_S:
                     case GGML_TYPE_IQ1_M:
                     case GGML_TYPE_IQ2_XXS:
@@ -16467,7 +16533,6 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
                     case GGML_TYPE_IQ4_XS:
                     case GGML_TYPE_IQ4_NL:
                     case GGML_TYPE_MXFP4:
-                    case GGML_TYPE_NVFP4:
                         break;
                     default:
                         return false;
@@ -16498,6 +16563,9 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
             }
         case GGML_OP_FLASH_ATTN_EXT:
             {
+                if (device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
+                    return false;
+                }
                 bool coopmat2 = device->coopmat2;
                 uint32_t HSK = op->src[1]->ne[0];
                 uint32_t HSV = op->src[2]->ne[0];
@@ -16758,6 +16826,9 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
         case GGML_OP_FILL:
             return op->type == GGML_TYPE_F32 || op->type == GGML_TYPE_F16;
         case GGML_OP_SCALE:
+            if (device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
+                return false;
+            }
             return ggml_is_contiguous(op->src[0]) && op->src[0]->type == GGML_TYPE_F32;
         case GGML_OP_PAD:
         case GGML_OP_ROLL:
@@ -16775,6 +16846,9 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
         case GGML_OP_MEAN:
             return op->src[0]->type == GGML_TYPE_F32 && ggml_is_contiguous_rows(op->src[0]);
         case GGML_OP_CUMSUM:
+            if (device->vendor_id == VK_VENDOR_ID_QUALCOMM) {
+                return false;
+            }
             {
                 if (device->subgroup_arithmetic && device->subgroup_require_full_support) {
                     return op->src[0]->type == GGML_TYPE_F32 && ggml_is_contiguous_rows(op->src[0]);

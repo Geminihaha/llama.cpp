@@ -39,7 +39,7 @@ void argsort(bool needs_bounds_check, const uint row) {
 
     // initialize indices
     if (p.outer_start == 0 && p.inner_start == 0) {
-        [[unroll]] for (int u = 0; u < WG_UNROLL_FACTOR; ++u) {
+         for (int u = 0; u < WG_UNROLL_FACTOR; ++u) {
             uint c = u*BLOCK_SIZE + col;
             if (c < p.ncols_padded) {
                 ivec2 v = ivec2(c, floatBitsToInt(data_a[row_offset + c]));
@@ -49,14 +49,14 @@ void argsort(bool needs_bounds_check, const uint row) {
         need_barrier = true;
     }
 
-    [[unroll]] for (uint outer_idx = p.outer_start, k = (2 << outer_idx); outer_idx < p.outer_end; k *= 2, outer_idx++) {
+     for (uint outer_idx = p.outer_start, k = (2 << outer_idx); outer_idx < p.outer_end; k *= 2, outer_idx++) {
         uint inner_end = min(p.inner_end, outer_idx + 1);
         for (uint j = k >> (p.inner_start + 1), inner_idx = p.inner_start; inner_idx < inner_end; j /= 2, inner_idx++) {
             if (need_barrier) {
                 controlBarrier(gl_ScopeWorkgroup, gl_ScopeWorkgroup, gl_StorageSemanticsBuffer, gl_SemanticsAcquireRelease);
             }
             need_barrier = true;
-            [[unroll]] for (int u = 0; u < WG_UNROLL_FACTOR; ++u) {
+             for (int u = 0; u < WG_UNROLL_FACTOR; ++u) {
                 int c = u*BLOCK_SIZE + col;
                 const int ixj = int(c ^ j);
 
@@ -84,7 +84,7 @@ void argsort(bool needs_bounds_check, const uint row) {
     if (p.outer_end == p.ncols_padded_log2 &&
         p.inner_end >= p.ncols_padded_log2 + 1) {
         controlBarrier(gl_ScopeWorkgroup, gl_ScopeWorkgroup, gl_StorageSemanticsBuffer, gl_SemanticsAcquireRelease);
-        [[unroll]] for (int u = 0; u < WG_UNROLL_FACTOR; ++u) {
+         for (int u = 0; u < WG_UNROLL_FACTOR; ++u) {
             uint c = u*BLOCK_SIZE + col;
             if (c < p.ncols) {
                 if (p.order == ASC) {

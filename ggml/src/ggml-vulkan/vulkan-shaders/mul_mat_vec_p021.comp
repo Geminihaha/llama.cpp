@@ -54,7 +54,7 @@ void main() {
     const uint row_dst = row_x;
 
     FLOAT_TYPE temp[8];
-    [[unroll]] for (uint i = 0; i < 8; ++i) {
+     for (uint i = 0; i < 8; ++i) {
         temp[i] = FLOAT_TYPE(0.0f);
     }
 
@@ -73,7 +73,7 @@ void main() {
             const uint ix = row_x*p.nchannels_x*p.ncols_x + channel_x*p.ncols_x + col_x;
             const vec4 av4 = vec4(data_a_v4[ix / 4]);
 
-            [[unroll]] for (uint c = 0; c < gqa_ratio; ++c) {
+             for (uint c = 0; c < gqa_ratio; ++c) {
                 // y is not transposed but permuted
                 const uint iy = (channel + c)*nrows_y + row_y;
 
@@ -95,7 +95,7 @@ void main() {
 
             const uint row_y = col_x;
 
-            [[unroll]] for (uint c = 0; c < gqa_ratio; ++c) {
+             for (uint c = 0; c < gqa_ratio; ++c) {
                 // y is not transposed but permuted
                 const uint iy = (channel + c)*nrows_y + row_y;
 
@@ -121,27 +121,27 @@ void main() {
         temp[7] = t[3];
     }
 #else
-    [[unroll]] for (uint c = 0; c < gqa_ratio; ++c) {
+     for (uint c = 0; c < gqa_ratio; ++c) {
         tmp[c][tid] = temp[c];
     }
     // sum up partial sums and write back result
     barrier();
-    [[unroll]] for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+     for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
-            [[unroll]] for (uint c = 0; c < gqa_ratio; ++c) {
+             for (uint c = 0; c < gqa_ratio; ++c) {
                 temp[c] += tmp[c][tid + s];
                 tmp[c][tid] = temp[c];
             }
         }
         barrier();
     }
-    [[unroll]] for (uint c = 0; c < gqa_ratio; ++c) {
+     for (uint c = 0; c < gqa_ratio; ++c) {
         temp[c] = tmp[c][tid];
     }
 #endif
 
     if (tid == 0) {
-        [[unroll]] for (uint c = 0; c < gqa_ratio; ++c) {
+         for (uint c = 0; c < gqa_ratio; ++c) {
             // dst is not transposed and not permuted
             const uint idst = (channel + c)*nrows_dst + row_dst;
             if ((p.fusion_flags & MAT_VEC_FUSION_FLAGS_BIAS0) != 0) {

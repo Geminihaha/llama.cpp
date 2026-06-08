@@ -44,7 +44,7 @@ void main() {
     tmpmax[col] = amax;
 
     barrier();
-    [[unroll]] for (int s = int(BLOCK_SIZE) / 2; s > 0; s >>= 1) {
+     for (int s = int(BLOCK_SIZE) / 2; s > 0; s >>= 1) {
         if (col < s && col + s < p.KX) {
             if (tmpmax[col] < tmpmax[col + s]) {
                 tmpmax[col] = tmpmax[col + s];

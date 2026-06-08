@@ -14,7 +14,7 @@ void main() {
 
     const uint num_iter = 2;
 
-    [[unroll]] for (uint i = 0; i < num_iter; ++i) {
+     for (uint i = 0; i < num_iter; ++i) {
         if (idx >= p.ne) {
             continue;
         }

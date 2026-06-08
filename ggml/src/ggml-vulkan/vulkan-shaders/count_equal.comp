@@ -18,7 +18,7 @@ void main() {
     const uint col = gl_LocalInvocationID.x;
 
     uint count = 0;
-    [[unroll]]
+    
     for (uint i = 0; i < CHUNK_SIZE; i += gl_WorkGroupSize.x) {
         const uint idx = base + i + col;
         if (idx >= p.KX) {

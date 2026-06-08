@@ -72,7 +72,7 @@ void topk(const uint row) {
 
     if (p.k == 1) {
         // Fast path for single output - just do a max reduction
-        [[unroll]] for (int s = BLOCK_SIZE / 2; s >= 1; s /= 2) {
+         for (int s = BLOCK_SIZE / 2; s >= 1; s /= 2) {
             if (tid < s) {
                 ivec2 a = dst_row[tid];
                 ivec2 b = dst_row[tid + s];
@@ -171,7 +171,7 @@ void topk(const uint row) {
             barrier();
 
             uint out_idx = 0;
-            [[unroll]] for (int i = 0; i < BLOCK_SIZE / SUBGROUP_SIZE; ++i) {
+             for (int i = 0; i < BLOCK_SIZE / SUBGROUP_SIZE; ++i) {
                 if (i < tid / SUBGROUP_SIZE) {
                     out_idx += offset_partials[i];
                 }
@@ -198,7 +198,7 @@ void topk(const uint row) {
             uint out_idx = 0;
             uint eq_min_base = 0;
             uint eq_min_idx = 0;
-            [[unroll]] for (int i = 0; i < BLOCK_SIZE / SUBGROUP_SIZE; ++i) {
+             for (int i = 0; i < BLOCK_SIZE / SUBGROUP_SIZE; ++i) {
                 if (i < tid / SUBGROUP_SIZE) {
                     out_idx += offset_partials[i];
                     eq_min_idx += eq_min_partials[i];

@@ -38,10 +38,10 @@ float FLT_MAX_OVER_2 = uintBitsToFloat(0x7EFFFFFF);
 void loadvec4(inout uint result, const uint i0, const uint i1, const uint i2, const uint i3, const bool need_bounds_check) {
     const uint tid = gl_LocalInvocationIndex;
 
-    [[unroll]] for (uint block_x = 0; block_x < 16; ++block_x) {
+     for (uint block_x = 0; block_x < 16; ++block_x) {
         float min_v = FLT_MAX_OVER_2;
         float max_v = -FLT_MAX_OVER_2;
-        [[unroll]] for (uint i = 0; i < Br * Bc / 4; i += BLOCK_SIZE) {
+         for (uint i = 0; i < Br * Bc / 4; i += BLOCK_SIZE) {
             uint j0 = (i + tid) % (Bc / 4);
             uint j1 = (i + tid) / (Bc / 4);
 
@@ -51,12 +51,12 @@ void loadvec4(inout uint result, const uint i0, const uint i1, const uint i2, co
 
             if (!need_bounds_check || j0 + 3 < nem0) {
                 vec4 f = vec4(data_av4[(j0 + j1 * nbm1 + i2 * nbm2 + i3 * nbm3) / 4]);
-                [[unroll]] for (int c = 0; c < 4; ++c) {
+                 for (int c = 0; c < 4; ++c) {
                     min_v = min(min_v, f[c]);
                     max_v = max(max_v, f[c]);
                 }
             } else {
-                [[unroll]] for (int c = 0; c < 4; ++c) {
+                 for (int c = 0; c < 4; ++c) {
                     if (j0 + c < nem0) {
                         float f = float(data_a[j0 + j1 * nbm1 + i2 * nbm2 + i3 * nbm3]);
                         min_v = min(min_v, f);
@@ -73,7 +73,7 @@ void loadvec4(inout uint result, const uint i0, const uint i1, const uint i2, co
         }
         barrier();
         if (tid == 0) {
-            [[unroll]] for (uint i = 0; i < NUM_SUBGROUPS; ++i) {
+             for (uint i = 0; i < NUM_SUBGROUPS; ++i) {
                 min_v = min(min_v, minsh[i]);
                 max_v = max(max_v, maxsh[i]);
             }
@@ -114,10 +114,10 @@ void main() {
             loadvec4(result, i0, i1, i2, i3, true);
         }
     } else {
-        [[unroll]] for (uint block_x = 0; block_x < 16; ++block_x) {
+         for (uint block_x = 0; block_x < 16; ++block_x) {
             float min_v = FLT_MAX_OVER_2;
             float max_v = -FLT_MAX_OVER_2;
-            [[unroll]] for (uint i = 0; i < Br * Bc; i += BLOCK_SIZE) {
+             for (uint i = 0; i < Br * Bc; i += BLOCK_SIZE) {
                 if ((Br * Bc % BLOCK_SIZE) != 0 && i + tid >= Br * Bc) {
                     continue;
                 }
@@ -141,7 +141,7 @@ void main() {
             }
             barrier();
             if (tid == 0) {
-                [[unroll]] for (uint i = 0; i < NUM_SUBGROUPS; ++i) {
+                 for (uint i = 0; i < NUM_SUBGROUPS; ++i) {
                     min_v = min(min_v, minsh[i]);
                     max_v = max(max_v, maxsh[i]);
                 }

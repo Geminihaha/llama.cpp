@@ -43,18 +43,18 @@ void main() {
     FLOAT_TYPE X[N];
 
     // Loop over batches of rows
-    [[unroll]] for (uint row_base = 0; row_base < N; row_base += BATCH_N) {
+     for (uint row_base = 0; row_base < N; row_base += BATCH_N) {
         const uint cur_N = min(BATCH_N, N - row_base);
 
         // Load the A matrix batch into shA
-        [[unroll]] for (uint i = 0; i < cur_N * N; i += gl_WorkGroupSize.x) {
+         for (uint i = 0; i < cur_N * N; i += gl_WorkGroupSize.x) {
             uint idx = i + tid;
             if (((cur_N * N) % gl_WorkGroupSize.x == 0) || idx < cur_N * N) {
                 shA[idx] = get_a(row_base + idx / N, idx % N);
             }
         }
         // Load the B matrix batch into shB
-        [[unroll]] for (uint i = 0; i < cur_N * K; i += gl_WorkGroupSize.x) {
+         for (uint i = 0; i < cur_N * K; i += gl_WorkGroupSize.x) {
             uint idx = i + tid;
             if (((cur_N * K) % gl_WorkGroupSize.x == 0) || idx < cur_N * K) {
                 shB[idx] = get_b(row_base + idx / K, idx % K);
@@ -64,11 +64,11 @@ void main() {
 
         // Each thread solves one column
         if (tid < K) {
-            [[unroll]] for (uint row_offset = 0; row_offset < cur_N; ++row_offset) {
+             for (uint row_offset = 0; row_offset < cur_N; ++row_offset) {
                 uint r = row_base + row_offset;
                 FLOAT_TYPE b = shB[row_offset * K + tid];
                 // Compute x[r,c] = (b[r,c] - sum(a[r,c]*x[c])) / a[r,r]
-                [[unroll]] for (int c = 0; c < r; ++c) {
+                 for (int c = 0; c < r; ++c) {
                     b -= shA[row_offset * N + c] * X[c];
                 }
                 FLOAT_TYPE x = b / shA[row_offset * N + r];

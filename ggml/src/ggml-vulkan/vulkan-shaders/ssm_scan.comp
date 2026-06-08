@@ -75,7 +75,7 @@ void main() {
 
     float state[c_factor];
 
-    [[unroll]] for (uint j = 0; j < c_factor; j++) {
+     for (uint j = 0; j < c_factor; j++) {
         state[j] = s0[s0_base_idx + SUBGROUP_SIZE * j + lane];
     }
 
@@ -88,7 +88,7 @@ void main() {
 
         const float dA   = exp(dt_soft_plus * a);
         const float x_dt = x[x_base_idx + i * stride_x] * dt_soft_plus;
-        [[unroll]] for (uint j = 0; j < c_factor; j++) {
+         for (uint j = 0; j < c_factor; j++) {
             float B_val = B[B_base_idx + i * stride_B + SUBGROUP_SIZE * j + lane];
             float C_val = C[C_base_idx + i * stride_C + SUBGROUP_SIZE * j + lane];
             state[j] = (state[j] * dA) + (B_val * x_dt);
@@ -100,7 +100,7 @@ void main() {
 #else
         temp[tid] = state_sum;
         barrier();
-        [[unroll]] for (uint s = SUBGROUP_SIZE / 2; s > 0; s >>= 1) {
+         for (uint s = SUBGROUP_SIZE / 2; s > 0; s >>= 1) {
             if (lane < s) {
                 temp[tid] += temp[tid + s];
             }
@@ -117,7 +117,7 @@ void main() {
     }
 
     // write back the state
-    [[unroll]]
+    
     for (int j = 0; j < c_factor; j++) {
         d[s_base_idx + SUBGROUP_SIZE * j + lane] = state[j];
     }

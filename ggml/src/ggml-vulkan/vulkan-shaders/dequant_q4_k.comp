@@ -8,7 +8,7 @@ layout (binding = 0) readonly buffer A {A_TYPE data_a[];};
 layout (binding = 1) writeonly buffer D {D_TYPE data_b[];};
 
 void main() {
-    [[unroll]] for (uint wgy = 0; wgy < 256; wgy++) {
+     for (uint wgy = 0; wgy < 256; wgy++) {
         const uint ib = gl_WorkGroupID.x * 256 + wgy;
         if (ib >= p.nel / QUANT_K) {
             return;
@@ -60,7 +60,7 @@ void main() {
         const FLOAT_TYPE d2 = dall * sc;
         const FLOAT_TYPE m2 = dmin * mbyte;
 
-        [[unroll]] for (uint l = 0; l < n; ++l) {
+         for (uint l = 0; l < n; ++l) {
             data_b[y_idx + l     ] = D_TYPE(d1 * FLOAT_TYPE(data_a[ib].qs[qs_idx + l] & 0xF) - m1);
             data_b[y_idx + l + 32] = D_TYPE(d2 * FLOAT_TYPE(data_a[ib].qs[qs_idx + l] >>  4) - m2);
         }

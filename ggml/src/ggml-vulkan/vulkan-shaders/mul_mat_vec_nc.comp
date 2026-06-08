@@ -53,7 +53,7 @@ void main() {
         // Unroll 2x and do vec4 loads if aligned
         const uint unroll_count = 2;
         if (col_x0 + unroll_count * 4 * BLOCK_SIZE <= p.ncols_x && is_aligned) {
-            [[unroll]] for (uint i = 0; i < unroll_count; ++i) {
+             for (uint i = 0; i < unroll_count; ++i) {
                 const uint col_x = col_x0 + 4*tid;
 
                 const uint row_y = col_x;
@@ -105,7 +105,7 @@ void main() {
 
     // sum up partial sums and write back result
     barrier();
-    [[unroll]] for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+     for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
             tmp[tid] += tmp[tid + s];
         }
