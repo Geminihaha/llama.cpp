@@ -3,6 +3,8 @@
 이 프로젝트는 [ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)를 포크한 저장소입니다.
 주요 목적은 **Android(Termux)** 환경에서 LLM(Large Language Model)을 효율적으로 구동하기 위한 빌드 최적화 및 성능 테스트입니다.
 
+![llama](https://raw.githubusercontent.com/ggml-org/llama.brand/refs/heads/master/cover/llama-cpp/cover-llama-cpp-dark.svg)
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Release](https://img.shields.io/github/v/release/ggml-org/llama.cpp)](https://github.com/ggml-org/llama.cpp/releases)
 [![Server](https://github.com/ggml-org/llama.cpp/actions/workflows/server.yml/badge.svg)](https://github.com/ggml-org/llama.cpp/actions/workflows/server.yml)
@@ -57,7 +59,28 @@ Termux 환경에서의 기본적인 빌드 절차는 다음과 같습니다 (원
 - Hugging Face Inference Endpoints now support GGUF out of the box! https://github.com/ggml-org/llama.cpp/discussions/9669
 - Hugging Face GGUF editor: [discussion](https://github.com/ggml-org/llama.cpp/discussions/9268) | [tool](https://huggingface.co/spaces/CISCai/gguf-editor)
 - WebGPU support is now available in the browser, see a blog/demo introducing it [here](https://reeselevine.github.io/llamas-on-the-web/).
->
+
+----
+
+## Quick start
+
+Getting started with llama.cpp is straightforward. Here are several ways to install it on your machine:
+
+- Install `llama.cpp` using [brew, nix, winget, or conda-forge](docs/install.md)
+- Run with Docker - see our [Docker documentation](docs/docker.md)
+- Download pre-built binaries from the [releases page](https://github.com/ggml-org/llama.cpp/releases)
+- Build from source by cloning this repository - check out [our build guide](docs/build.md)
+
+Once installed, you'll need a model to work with. Head to the [Obtaining and quantizing models](#obtaining-and-quantizing-models) section to learn more.
+
+Example command:
+
+```sh
+# Use a local model file
+llama-cli -m my_model.gguf
+
+# Or download and run a model directly from Hugging Face
+llama-cli -hf ggml-org/gemma-3-1b-it-GGUF
 
 # Launch OpenAI-compatible API server
 llama-server -hf ggml-org/gemma-3-1b-it-GGUF
