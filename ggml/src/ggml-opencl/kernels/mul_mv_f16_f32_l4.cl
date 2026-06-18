@@ -52,6 +52,9 @@ kernel void kernel_mul_mat_f16_f32_l4(
         int r2,
         int r3
 ) {
+#ifdef GGML_OPENCL_USE_ADRENO_KERNELS
+    local float l_sum[1024];
+#endif
     src0 = (global char*)((global char*)src0 + offset0);
     src1 = (global char*)((global char*)src1 + offset1);
     dst = (global float*)((global char*)dst + offsetd);
@@ -80,10 +83,25 @@ kernel void kernel_mul_mat_f16_f32_l4(
             sumf += convert_float(x4[i].s3) * y4[i].s3;
         }
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
         float all_sum = sub_group_reduce_add(sumf);
         if (get_sub_group_local_id() == 0) {
             dst[im*ne1*ne0 + r1*ne0 + r0] = all_sum;
         }
+#else
+        // Fallback to local memory reduction for Adreno 6xx to avoid compiler crash on sub_group_reduce_add
+        l_sum[get_local_id(0)] = sumf;
+        barrier(CLK_LOCAL_MEM_FENCE);
+        for (int i = get_local_size(0) / 2; i > 0; i /= 2) {
+            if (get_local_id(0) < i) {
+                l_sum[get_local_id(0)] += l_sum[get_local_id(0) + i];
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+        }
+        if (get_local_id(0) == 0) {
+            dst[im*ne1*ne0 + r1*ne0 + r0] = l_sum[0];
+        }
+#endif
     }
 }
 
@@ -119,6 +137,9 @@ kernel void kernel_mul_mat_f16_f32_l4_dr(
         int r2,
         int r3
 ) {
+#ifdef GGML_OPENCL_USE_ADRENO_KERNELS
+    local float l_sum[1024];
+#endif
     src0 = (global char*)((global char*)src0 + offset0);
     src1 = (global char*)((global char*)src1 + offset1);
     dst  = (global float*)((global char*)dst  + offsetd);
@@ -163,6 +184,7 @@ kernel void kernel_mul_mat_f16_f32_l4_dr(
         }
     }
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     #pragma unroll
     for (int n = 0; n < MUL_MAT_F16_F32_L4_DR_NDST; ++n) {
         float reduced = sub_group_reduce_add(sumf[n]);
@@ -171,6 +193,25 @@ kernel void kernel_mul_mat_f16_f32_l4_dr(
             dst[im*ne1*ne0 + r0] = reduced;
         }
     }
+#else
+    // Fallback to local memory reduction for Adreno 6xx to avoid compiler crash on sub_group_reduce_add
+    #pragma unroll
+    for (int n = 0; n < MUL_MAT_F16_F32_L4_DR_NDST; ++n) {
+        l_sum[get_local_id(0)] = sumf[n];
+        barrier(CLK_LOCAL_MEM_FENCE);
+        for (int i = get_local_size(0) / 2; i > 0; i /= 2) {
+            if (get_local_id(0) < i) {
+                l_sum[get_local_id(0)] += l_sum[get_local_id(0) + i];
+            }
+            barrier(CLK_LOCAL_MEM_FENCE);
+        }
+        int r0 = r0_base + n;
+        if (get_local_id(0) == 0 && r0 < ne01) {
+            dst[im*ne1*ne0 + r0] = l_sum[0];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+#endif
 }
 
 // Kernels for decoding, Adreno only for now
