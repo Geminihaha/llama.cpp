@@ -33,6 +33,10 @@
     *   `-DGGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8` 매크로를 통해 커널 내에서 조건부 사용 가능하도록 구성.
 *   **결과:** 하드웨어 가속 유닛 활용 준비 완료.
 
+### E. Flash Attention 커널 컴파일/로딩 구문 오류 해결
+*   **해결:** `ggml_backend_opencl_context` 구조체 하위에 직접 존재하지 않고 `fa` (`ggml_opencl_fa_kernels` 타입) 중첩 구조체 아래 정의된 Flash Attention 커널 맵들(f16, f32, bm, bn 등)에 접근할 때 `backend_ctx->fa.*` 경로를 올바르게 사용하도록 수정.
+*   **결과:** OpenCL 빌드 시 발생하던 컴파일 오류 해결 및 빌드 성공.
+
 ---
 
 ## 3. 구현 체크리스트
@@ -45,6 +49,7 @@
 - [x] `cumsum.cl`: Adreno 6xx용 로컬 메모리 Scan
 - [x] `group_norm.cl`: Adreno 6xx용 로컬 메모리 Reduction
 - [x] `mul_mv_q4_k`, `f16_f16`, `q8_0`, `q6_k`: FP16 가속 적용
+- [x] `ggml-opencl.cpp` 내 Flash Attention 커널 멤버 변수 접근 수정
 
 ---
 
