@@ -98,11 +98,18 @@ inline float mm_block_q_4_0_dot_y_flat(
 // This variant performs 1d blocking with 16x output.
 // Eeach simdgroup outputs 16 values on `n0` dim (row in the output matrix).
 //
-inline void mul_mat_q_n_f32_1d_16x_flat(
+#ifdef INTEL_GPU
+REQD_SUBGROUP_SIZE_16
+#elif defined (ADRENO_GPU)
+REQD_SUBGROUP_SIZE_64
+#endif
+kernel void kernel_mul_mat_q4_0_f32_1d_16x_flat(
         global uchar * src0_q,
         global half  * src0_d,
         global float * src1,
+        ulong offset1,
         global float * dst,
+        ulong offsetd,
         int ne00,
         int ne01,
         int ne02,
@@ -113,6 +120,13 @@ inline void mul_mat_q_n_f32_1d_16x_flat(
         int r2,
         int r3
 ) {
+#ifdef GGML_OPENCL_USE_ADRENO_KERNELS
+    local float l_sum[1024];
+#endif
+
+    src1 = (global float*)((global char*)src1 + offset1);
+    dst = (global float*)((global char*)dst + offsetd);
+
     const int nb = ne00/QK4_0;
 
     int r0 = get_group_id(0);
@@ -215,6 +229,7 @@ inline void mul_mat_q_n_f32_1d_16x_flat(
         yb += QK4_0 * (N_SIMDWIDTH/2);
     }
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     float16 tot = (float16)(
         sub_group_reduce_add(sumf.s0), sub_group_reduce_add(sumf.s1),
         sub_group_reduce_add(sumf.s2), sub_group_reduce_add(sumf.s3),
@@ -226,6 +241,65 @@ inline void mul_mat_q_n_f32_1d_16x_flat(
         sub_group_reduce_add(sumf.sc), sub_group_reduce_add(sumf.sd),
         sub_group_reduce_add(sumf.se), sub_group_reduce_add(sumf.sf)
     );
+#else
+    int lid = get_local_id(0);
+    l_sum[0*64 + lid] = sumf.s0;
+    l_sum[1*64 + lid] = sumf.s1;
+    l_sum[2*64 + lid] = sumf.s2;
+    l_sum[3*64 + lid] = sumf.s3;
+    l_sum[4*64 + lid] = sumf.s4;
+    l_sum[5*64 + lid] = sumf.s5;
+    l_sum[6*64 + lid] = sumf.s6;
+    l_sum[7*64 + lid] = sumf.s7;
+    l_sum[8*64 + lid] = sumf.s8;
+    l_sum[9*64 + lid] = sumf.s9;
+    l_sum[10*64 + lid] = sumf.sa;
+    l_sum[11*64 + lid] = sumf.sb;
+    l_sum[12*64 + lid] = sumf.sc;
+    l_sum[13*64 + lid] = sumf.sd;
+    l_sum[14*64 + lid] = sumf.se;
+    l_sum[15*64 + lid] = sumf.sf;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int i = get_local_size(0) / 2; i > 0; i /= 2) {
+        if (lid < i) {
+            l_sum[0*64 + lid] += l_sum[0*64 + lid + i];
+            l_sum[1*64 + lid] += l_sum[1*64 + lid + i];
+            l_sum[2*64 + lid] += l_sum[2*64 + lid + i];
+            l_sum[3*64 + lid] += l_sum[3*64 + lid + i];
+            l_sum[4*64 + lid] += l_sum[4*64 + lid + i];
+            l_sum[5*64 + lid] += l_sum[5*64 + lid + i];
+            l_sum[6*64 + lid] += l_sum[6*64 + lid + i];
+            l_sum[7*64 + lid] += l_sum[7*64 + lid + i];
+            l_sum[8*64 + lid] += l_sum[8*64 + lid + i];
+            l_sum[9*64 + lid] += l_sum[9*64 + lid + i];
+            l_sum[10*64 + lid] += l_sum[10*64 + lid + i];
+            l_sum[11*64 + lid] += l_sum[11*64 + lid + i];
+            l_sum[12*64 + lid] += l_sum[12*64 + lid + i];
+            l_sum[13*64 + lid] += l_sum[13*64 + lid + i];
+            l_sum[14*64 + lid] += l_sum[14*64 + lid + i];
+            l_sum[15*64 + lid] += l_sum[15*64 + lid + i];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float16 tot;
+    tot.s0 = l_sum[0*64 + 0];
+    tot.s1 = l_sum[1*64 + 0];
+    tot.s2 = l_sum[2*64 + 0];
+    tot.s3 = l_sum[3*64 + 0];
+    tot.s4 = l_sum[4*64 + 0];
+    tot.s5 = l_sum[5*64 + 0];
+    tot.s6 = l_sum[6*64 + 0];
+    tot.s7 = l_sum[7*64 + 0];
+    tot.s8 = l_sum[8*64 + 0];
+    tot.s9 = l_sum[9*64 + 0];
+    tot.sa = l_sum[10*64 + 0];
+    tot.sb = l_sum[11*64 + 0];
+    tot.sc = l_sum[12*64 + 0];
+    tot.sd = l_sum[13*64 + 0];
+    tot.se = l_sum[14*64 + 0];
+    tot.sf = l_sum[15*64 + 0];
+#endif
 
     if (get_sub_group_local_id() == 0) {
         if (first_row + 0 < ne01) {
@@ -280,32 +354,4 @@ inline void mul_mat_q_n_f32_1d_16x_flat(
             dst[r1*ne0 + im*ne0*ne1 + first_row + 15] = tot.sf;
         }
     }
-}
-
-#ifdef INTEL_GPU
-REQD_SUBGROUP_SIZE_16
-#elif defined (ADRENO_GPU)
-REQD_SUBGROUP_SIZE_64
-#endif
-kernel void kernel_mul_mat_q4_0_f32_1d_16x_flat(
-        global uchar * src0_q,
-        global half  * src0_d,
-        global float * src1,
-        ulong offset1,
-        global float * dst,
-        ulong offsetd,
-        int ne00,
-        int ne01,
-        int ne02,
-        int ne10,
-        int ne12,
-        int ne0,
-        int ne1,
-        int r2,
-        int r3
-) {
-    src1 = (global float*)((global char*)src1 + offset1);
-    dst = (global float*)((global char*)dst + offsetd);
-
-    mul_mat_q_n_f32_1d_16x_flat(src0_q, src0_d, src1, dst, ne00, ne01, ne02, ne10, ne12, ne0, ne1, r2, r3);
 }

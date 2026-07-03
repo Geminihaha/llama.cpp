@@ -6,6 +6,8 @@
 #elif defined(cl_qcom_subgroup_shuffle)
 #pragma OPENCL EXTENSION cl_qcom_subgroup_shuffle : enable
 #define HAS_SUBGROUP_SHUFFLE 1
+#define sub_group_shuffle(val, id) qcom_sub_group_shuffle((val), (id), CLK_SUB_GROUP_SHUFFLE_WIDTH_WAVE_SIZE_QCOM, (val))
+#define sub_group_shuffle_xor(val, mask) qcom_sub_group_shuffle_xor((val), (mask), CLK_SUB_GROUP_SHUFFLE_WIDTH_WAVE_SIZE_QCOM, (val))
 #endif
 
 #define ACC_TYPE float

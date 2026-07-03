@@ -10,6 +10,13 @@
 #elif defined(cl_qcom_subgroup_shuffle)
 #pragma OPENCL EXTENSION cl_qcom_subgroup_shuffle : enable
 #define HAS_SUBGROUP_SHUFFLE 1
+#define sub_group_shuffle(val, id) adreno_sub_group_shuffle((val), (id), l_shuffle_temp)
+#define sub_group_shuffle_xor(val, mask) qcom_sub_group_shuffle_xor((val), (mask), CLK_SUB_GROUP_SHUFFLE_WIDTH_WAVE_SIZE_QCOM, (val))
+static inline float adreno_sub_group_shuffle(float val, uint id, local float * temp) {
+    temp[get_local_id(0)] = val;
+    sub_group_barrier(CLK_LOCAL_MEM_FENCE);
+    return temp[(get_local_id(0) - get_sub_group_local_id()) + id];
+}
 #endif
 
 // Flash attention: Q=f32, K=q4_0, V=q4_0.
@@ -617,6 +624,9 @@ __kernel void flash_attn_f32_q4_0(
     const global void * blk_void
 ) {
     const int tid = get_local_id(0);
+#if defined(cl_qcom_subgroup_shuffle)
+    local float l_shuffle_temp[WG_SIZE];
+#endif
     const int block_q_idx = get_group_id(0);
     const int head_batch_idx = get_global_id(1);
 
