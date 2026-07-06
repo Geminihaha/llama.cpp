@@ -8387,7 +8387,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_kernel kernel;
 #ifdef GGML_OPENCL_USE_ADRENO_KERNELS
         kernel = backend_ctx->kernel_convert_block_q6_K;
-        if (false && use_adreno_kernels(backend_ctx, tensor) && !use_flat_gemv_for_large_m_q6_K(tensor)) {
+        if (use_adreno_kernels(backend_ctx, tensor) && !use_flat_gemv_for_large_m_q6_K(tensor)) {
             kernel = backend_ctx->kernel_convert_block_q6_K_noshuffle;
         }
 #else
@@ -8420,7 +8420,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         tensor->extra  = extra;
 
 #ifdef GGML_OPENCL_USE_ADRENO_KERNELS
-        if (false && use_adreno_kernels(backend_ctx, tensor) && !use_flat_gemv_for_large_m_q6_K(tensor)) {
+        if (use_adreno_kernels(backend_ctx, tensor) && !use_flat_gemv_for_large_m_q6_K(tensor)) {
             cl_int M = tensor->ne[1];   // ne01
             cl_int K = tensor->ne[0];   // ne00
 
@@ -16743,14 +16743,14 @@ static void ggml_cl_mul_mat(ggml_backend_t backend, const ggml_tensor * src0, co
                 return;
         }
 
-        // q4_k x fp32 -- DEBUG: disabled temporarily to test
-        if (false && src0t == GGML_TYPE_Q4_K && src1t == GGML_TYPE_F32 && !use_flat_gemv_for_large_m_q4_K(src0)) {
+        // q4_k x fp32
+        if (src0t == GGML_TYPE_Q4_K && src1t == GGML_TYPE_F32 && !use_flat_gemv_for_large_m_q4_K(src0)) {
             ggml_cl_mul_mat_q4_k_f32_adreno(backend, src0, src1, dst);
             return;
         }
 
         // q6_K x fp32
-        if (false && src0t == GGML_TYPE_Q6_K && src1t == GGML_TYPE_F32 && !use_flat_gemv_for_large_m_q6_K(src0)) {
+        if (src0t == GGML_TYPE_Q6_K && src1t == GGML_TYPE_F32 && !use_flat_gemv_for_large_m_q6_K(src0)) {
             ggml_cl_mul_mat_q6_K_f32_adreno(backend, src0, src1, dst);
             return;
         }
