@@ -6476,6 +6476,19 @@ static bool ggml_opencl_supports_op(ggml_backend_dev_t dev, const struct ggml_te
                                      k->type != v->type &&
                                      is_kv_type_ok(k->type) && is_kv_type_ok(v->type);
 
+            // Adreno: the f32 and quant (q8_0/q4_0) FA kernels miscompile with
+            // grouped-query attention (n_head_kv < n_head) at large head sizes
+            // (dk >= 128), producing garbage (test-backend-ops ERR ~2.0). Only
+            // the f16 / f32+f16-mixed KV paths stay correct there (their KV
+            // local/register footprint is half). Reject everything else so it
+            // falls back to CPU. This is the gemma-3/4 SWA-layer config
+            // (dk=256, GQA 8:1) with a quantized KV cache.
+            const bool gqa_large_head = k->ne[2] < q->ne[2] && dk >= 128;
+            const bool kv_is_f16_path = k->type == GGML_TYPE_F16 && v->type == GGML_TYPE_F16;
+            if (gqa_large_head && !kv_is_f16_path) {
+                return false;
+            }
+
             return is_f32_f32 || is_f16_f16 || is_f32_f16 || is_f32_q8_0 || is_f32_q4_0 || is_f32_asym;
         }
         default:
