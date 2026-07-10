@@ -9280,6 +9280,20 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
     test_cases.emplace_back(new test_flash_attn_ext(64, 128, 4, {1, 1}, 128, 2, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_Q4_0, GGML_TYPE_Q1_0));
     test_cases.emplace_back(new test_flash_attn_ext(128, 64, 4, {1, 1}, 64, 2, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_Q1_0, GGML_TYPE_F16));
 
+    // gemma-3/4 SWA-layer config (dk=dv=256, GQA 8:1) with a quantized KV
+    // cache — not covered by the F16-only large-head sweep above. The native
+    // q8_0/q4_0 (and f32) FA kernels miscompile with GQA at dk>=128 on Adreno,
+    // so ggml_opencl_supports_op rejects these and they fall back to CPU; F16
+    // KV stays on the (correct) GPU mixed kernel. Regression guard for both.
+    for (ggml_type kvt : {GGML_TYPE_Q8_0, GGML_TYPE_Q4_0, GGML_TYPE_F16}) {
+        for (int kv : {256, 512}) {
+            for (int nb : {1, 8, 32}) {
+                test_cases.emplace_back(new test_flash_attn_ext(
+                    256, 256, 1, {8, 1}, kv, nb, true, false, 0, 0, GGML_PREC_F32, kvt, kvt));
+            }
+        }
+    }
+
     test_cases.emplace_back(new test_cross_entropy_loss     (GGML_TYPE_F32, {   10, 5, 4, 3}));
     test_cases.emplace_back(new test_cross_entropy_loss     (GGML_TYPE_F32, {30000, 1, 1, 1}));
     test_cases.emplace_back(new test_cross_entropy_loss_back(GGML_TYPE_F32, {   10, 5, 4, 3}));
