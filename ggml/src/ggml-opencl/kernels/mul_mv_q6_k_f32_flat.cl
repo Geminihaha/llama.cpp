@@ -173,10 +173,48 @@ kernel void kernel_mul_mv_q6_K_f32_flat(
         }
     }
 
+    // Use safe local memory reduction to bypass Adreno GPU driver subgroup reduction bugs.
+    // Each subgroup writes to its own slice of local memory to avoid data collision
+    // when N_SIMDGROUP > 1 (i.e. multiple subgroups per workgroup).
+    local float l_sum[N_DST][N_SIMDGROUP * N_SIMDWIDTH];
+    int sgid   = get_sub_group_id();
+    int slid   = get_sub_group_local_id();
+    int stride = N_SIMDWIDTH;
+
     for (int row = 0; row < N_DST; row++) {
-        float tot = sub_group_reduce_add(sumf[row]);
-        if (get_sub_group_local_id() == 0 && first_row + row < ne01) {
-            dst[r1*ne0 + im*ne0*ne1 + first_row + row] = tot;
+        l_sum[row][sgid * stride + slid] = sumf[row];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int row = 0; row < N_DST; row++) {
+        int base = sgid * stride;
+        if (slid < 32) {
+            l_sum[row][base + slid] += l_sum[row][base + slid + 32];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if (slid < 16) {
+            l_sum[row][base + slid] += l_sum[row][base + slid + 16];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if (slid < 8) {
+            l_sum[row][base + slid] += l_sum[row][base + slid + 8];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if (slid < 4) {
+            l_sum[row][base + slid] += l_sum[row][base + slid + 4];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if (slid < 2) {
+            l_sum[row][base + slid] += l_sum[row][base + slid + 2];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+        if (slid < 1) {
+            l_sum[row][base + slid] += l_sum[row][base + slid + 1];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        if (slid == 0 && first_row + row < ne01) {
+            dst[r1*ne0 + im*ne0*ne1 + first_row + row] = l_sum[row][base];
         }
     }
 }

@@ -98,11 +98,18 @@ inline float mm_block_q_4_0_dot_y_flat(
 // This variant performs 1d blocking with 8x output.
 // Eeach simdgroup outputs 8 values on `n0` dim (row in the output matrix).
 //
-inline void mul_mat_q_n_f32_1d_8x_flat(
+#ifdef INTEL_GPU
+REQD_SUBGROUP_SIZE_16
+#elif defined (ADRENO_GPU)
+REQD_SUBGROUP_SIZE_64
+#endif
+kernel void kernel_mul_mat_q4_0_f32_1d_8x_flat(
         global uchar * src0_q,
         global half  * src0_d,
         global float * src1,
+        ulong offset1,
         global float * dst,
+        ulong offsetd,
         int ne00,
         int ne01,
         int ne02,
@@ -113,25 +120,25 @@ inline void mul_mat_q_n_f32_1d_8x_flat(
         int r2,
         int r3
 ) {
+#ifdef GGML_OPENCL_USE_ADRENO_KERNELS
+    local float l_sum[512];
+#endif
+
+    src1 = (global float*)((global char*)src1 + offset1);
+    dst = (global float*)((global char*)dst + offsetd);
+
     const int nb = ne00/QK4_0;
 
     int r0 = get_group_id(0);
     int r1 = get_group_id(1);
     int im = get_group_id(2);
 
-    // (r0 * N_SIMDGROUP + get_sub_group_id()) is the linear global id of
-    // a SIMD group in the grid. Each SIMD group produces N_DST values in the
-    // result, hence uses nb blocks, i.e., the offset becomes first_row*nb.
-    // Currently with llama2 7B, im is always 0.
-    // TODO: how to handle im/gqa*(nb*ne0)?
     int first_row = (r0 * N_SIMDGROUP + get_sub_group_id()) * N_DST;
 
     int i12 = im%ne12;
     int i13 = im/ne12;
 
-    // The number of scales is the same as the number of blocks.
     ulong offset0_d = first_row * nb + (i12/r2)*(nb*ne01) + (i13/r3)*(nb*ne01*ne02);
-    // Each block contains QK4_0/2 uchars, hence offset for qs is as follows.
     ulong offset0_q = (first_row * nb + (i12/r2)*(nb*ne01) + (i13/r3)*(nb*ne01*ne02)) * QK4_0/2;
 
     global uchar * x = (global uchar *) src0_q + offset0_q;
@@ -204,12 +211,48 @@ inline void mul_mat_q_n_f32_1d_8x_flat(
         yb += QK4_0 * (N_SIMDWIDTH/2);
     }
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     float8 tot = (float8)(
         sub_group_reduce_add(sumf.s0), sub_group_reduce_add(sumf.s1),
         sub_group_reduce_add(sumf.s2), sub_group_reduce_add(sumf.s3),
         sub_group_reduce_add(sumf.s4), sub_group_reduce_add(sumf.s5),
         sub_group_reduce_add(sumf.s6), sub_group_reduce_add(sumf.s7)
     );
+#else
+    int lid = get_local_id(0);
+    l_sum[0*64 + lid] = sumf.s0;
+    l_sum[1*64 + lid] = sumf.s1;
+    l_sum[2*64 + lid] = sumf.s2;
+    l_sum[3*64 + lid] = sumf.s3;
+    l_sum[4*64 + lid] = sumf.s4;
+    l_sum[5*64 + lid] = sumf.s5;
+    l_sum[6*64 + lid] = sumf.s6;
+    l_sum[7*64 + lid] = sumf.s7;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int i = get_local_size(0) / 2; i > 0; i /= 2) {
+        if (lid < i) {
+            l_sum[0*64 + lid] += l_sum[0*64 + lid + i];
+            l_sum[1*64 + lid] += l_sum[1*64 + lid + i];
+            l_sum[2*64 + lid] += l_sum[2*64 + lid + i];
+            l_sum[3*64 + lid] += l_sum[3*64 + lid + i];
+            l_sum[4*64 + lid] += l_sum[4*64 + lid + i];
+            l_sum[5*64 + lid] += l_sum[5*64 + lid + i];
+            l_sum[6*64 + lid] += l_sum[6*64 + lid + i];
+            l_sum[7*64 + lid] += l_sum[7*64 + lid + i];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float8 tot;
+    tot.s0 = l_sum[0*64 + 0];
+    tot.s1 = l_sum[1*64 + 0];
+    tot.s2 = l_sum[2*64 + 0];
+    tot.s3 = l_sum[3*64 + 0];
+    tot.s4 = l_sum[4*64 + 0];
+    tot.s5 = l_sum[5*64 + 0];
+    tot.s6 = l_sum[6*64 + 0];
+    tot.s7 = l_sum[7*64 + 0];
+#endif
 
     if (get_sub_group_local_id() == 0) {
         if (first_row + 0 < ne01) {
@@ -238,32 +281,4 @@ inline void mul_mat_q_n_f32_1d_8x_flat(
             dst[r1*ne0 + im*ne0*ne1 + first_row + 7] = tot.s7;
         }
     }
-}
-
-#ifdef INTEL_GPU
-REQD_SUBGROUP_SIZE_16
-#elif defined (ADRENO_GPU)
-REQD_SUBGROUP_SIZE_64
-#endif
-kernel void kernel_mul_mat_q4_0_f32_1d_8x_flat(
-        global uchar * src0_q,
-        global half  * src0_d,
-        global float * src1,
-        ulong offset1,
-        global float * dst,
-        ulong offsetd,
-        int ne00,
-        int ne01,
-        int ne02,
-        int ne10,
-        int ne12,
-        int ne0,
-        int ne1,
-        int r2,
-        int r3
-) {
-    src1 = (global float*)((global char*)src1 + offset1);
-    dst = (global float*)((global char*)dst + offsetd);
-
-    mul_mat_q_n_f32_1d_8x_flat(src0_q, src0_d, src1, dst, ne00, ne01, ne02, ne10, ne12, ne0, ne1, r2, r3);
 }
