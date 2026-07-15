@@ -121,6 +121,7 @@ enum GPU_FAMILY {
 
 enum ADRENO_GPU_GEN {
     ADRENO_UNKNOWN,
+    A6X,
     A7X,
     A8X,
     X1E,
@@ -250,6 +251,19 @@ static ggml_cl_version get_opencl_c_version(ggml_cl_version platform_version, cl
 }
 
 static ADRENO_GPU_GEN get_adreno_gpu_gen(const char *device_name) {
+    if (strstr(device_name, "610") || strstr(device_name, "612") ||
+        strstr(device_name, "613") || strstr(device_name, "615") ||
+        strstr(device_name, "616") || strstr(device_name, "618") ||
+        strstr(device_name, "619") || strstr(device_name, "620") ||
+        strstr(device_name, "630") || strstr(device_name, "640") ||
+        strstr(device_name, "642") || strstr(device_name, "643") ||
+        strstr(device_name, "644") || strstr(device_name, "650") ||
+        strstr(device_name, "660") || strstr(device_name, "663") ||
+        strstr(device_name, "680") || strstr(device_name, "685") ||
+        strstr(device_name, "690")) {
+        return ADRENO_GPU_GEN::A6X;
+    }
+
     if (strstr(device_name, "730") ||
         strstr(device_name, "740") ||
         strstr(device_name, "750")) {
@@ -430,8 +444,40 @@ struct ggml_opencl_fa_kernels {
     // f32 Q / f16 KV (mixed)
     std::map<std::pair<int, int>, cl_kernel> f32_f16;
     std::map<std::pair<int, int>, cl_kernel> f32_f16_split;          // N_SPLIT>1 variant
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_split_k_img;    // DK=512 prefill split, K via image1d_buffer_t
     std::map<std::pair<int, int>, cl_kernel> f32_f16_q1;
     std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_split;       // flash-decoding K-split
+    // vec decode
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec;
+    // kv-head-coalesced vec decode
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq;
+    // kv-head-coalesced + flash-decoding split
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq_split;
+    // MQ_GQA=8 specializations
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq_g8;
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq_split_g8;
+    // k-image variant of MQ_G8 vec_mq_split
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq_split_g8_k_img;
+    // k-image variant of MQ_GQA=4 vec_mq_split
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq_split_k_img;
+    // Cluster-parallel decode
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq_split_c8;
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq_split_g8_c8;
+    // NSG_SPLIT=2 specializations (WG=128): the c8 kernel's register footprint
+    // caps its per-kernel WG at 128 on X2, below the stock 256/192 requirement.
+    // 2 subgroups × FA_CL_NCL streams still gives 16 in-flight rows per WG.
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq_split_c8_ns2;
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq_split_g8_c8_ns2;
+    // FA_CL_C=32 / MQ_GQA=8 / NSG_SPLIT=2 specialization for the DK=DV=256
+    // GQA=8 class (Qwen3.5/3.6-35B-A3B: 16 Q heads, 2 KV heads). o_acc =
+    // DV_VEC/32 × 8 = 128B/lane (in budget); the baseline fa1 path for this
+    // shape has NO MQ/FD at all and pays an 8× KV re-read per Q head.
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_vec_mq_split_g8_c32;
+    // alternative decode
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_local_tile;
+    // hybrid local-tile + MQ + FD-split kernel for DK=DV=128 only
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_local_mq_split;
+    std::map<std::pair<int, int>, cl_kernel> f32_f16_q1_local_mq_split_g8;
     std::map<std::pair<int, int>, int>       f32_f16_bm;
     std::map<std::pair<int, int>, int>       f32_f16_bn;
     std::map<std::pair<int, int>, int>       f32_f16_wg_size;
@@ -439,7 +485,13 @@ struct ggml_opencl_fa_kernels {
     std::map<std::pair<int, int>, int>       f32_f16_split_nkv_threshold;
     // f32 Q / native q8_0 KV
     std::map<std::pair<int, int>, cl_kernel> f32_q8_0_q1;            // decode
+    std::map<std::pair<int, int>, cl_kernel> f32_q8_0_q1_vec;        // DV-split + multi-subgroup decode
     std::map<std::pair<int, int>, cl_kernel> f32_q8_0_q1_split;      // flash-decoding pass 1
+    // KV-head-coalesced + flash-decoding split for q8_0 KV
+    std::map<std::pair<int, int>, cl_kernel> f32_q8_0_q1_vec_mq_split;
+    std::map<std::pair<int, int>, cl_kernel> f32_q8_0_q1_vec_mq_split_g8;
+    // Cluster-parallel q8_0 decode
+    std::map<std::pair<int, int>, cl_kernel> f32_q8_0_q1_vec_mq_split_c8;
     std::map<std::pair<int, int>, cl_kernel> f32_q8_0;               // prefill (baseline)
     std::map<std::pair<int, int>, cl_kernel> f32_q8_0_split;         // N_SPLIT>1 variant
     std::map<std::pair<int, int>, int>       f32_q8_0_split_wg_size;        // wg_size = bm*n_split
@@ -447,7 +499,14 @@ struct ggml_opencl_fa_kernels {
     std::map<std::pair<int, int>, int>       f32_q8_0_split_bm;             // per-split BLOCK_M
     // f32 Q / native q4_0 KV
     std::map<std::pair<int, int>, cl_kernel> f32_q4_0_q1;
+    std::map<std::pair<int, int>, cl_kernel> f32_q4_0_q1_vec;        // DV-split + multi-subgroup decode
     std::map<std::pair<int, int>, cl_kernel> f32_q4_0_q1_split;
+    // kv-head-coalesced + flash-decoding split for q4_0 kv (dp4a K dot)
+    std::map<std::pair<int, int>, cl_kernel> f32_q4_0_q1_vec_mq_split;
+    std::map<std::pair<int, int>, cl_kernel> f32_q4_0_q1_vec_mq_split_g8;
+    // Cluster-parallel q4_0 decode
+    std::map<std::pair<int, int>, cl_kernel> f32_q4_0_q1_vec_mq_split_g8_c8;
+    std::map<std::pair<int, int>, cl_kernel> f32_q4_0_q1_vec_mq_split_c8;
     std::map<std::pair<int, int>, cl_kernel> f32_q4_0;
     std::map<std::pair<int, int>, cl_kernel> f32_q4_0_split;
     std::map<std::pair<int, int>, int>       f32_q4_0_split_wg_size;
@@ -4753,6 +4812,68 @@ static void ggml_opencl_ensure_fa_pre_kernels(ggml_backend_opencl_context * back
     backend_ctx->fa.bn[{dk, dv}]              = cfg->bn;
 }
 
+// DK=512 prefill BM-tile
+static bool ggml_opencl_ensure_fa_f32_f16_prefill_512(ggml_backend_opencl_context * backend_ctx, bool split) {
+    const int dk = 512, dv = 512;
+    const std::pair<int, int> dk_dv = {dk, dv};
+    auto & target = split ? backend_ctx->fa.f32_f16_split : backend_ctx->fa.f32_f16;
+    if (target.count(dk_dv) > 0) { return true; }
+
+    static bool failed[2] = { false, false };
+    if (failed[split ? 1 : 0]) { return false; }
+
+    const ggml_opencl_fa_dim * cfg = nullptr;
+    for (const auto & d : g_opencl_fa_dims) {
+        if (d.dk == dk && d.dv == dv) { cfg = &d; break; }
+    }
+    if (cfg == nullptr) { failed[split ? 1 : 0] = true; return false; }
+    if (split && cfg->n_split <= 1) { failed[1] = true; return false; }
+
+    const ggml_opencl_fa_variant variant = split ? FA_VARIANT_F32_F16_SPLIT : FA_VARIANT_F32_F16;
+    std::string opts = ggml_opencl_fa_compile_opts(backend_ctx, cfg, variant) + " -D FA_PREFILL_ONLY";
+    cl_program prog = build_program_from_source_ex(
+        backend_ctx->context, backend_ctx->device,
+        ggml_opencl_fa_kernel_src(FA_VARIANT_F32_F16).c_str(), opts,
+        /*fatal=*/false, split ? "fa f32_f16 prefill512 split" : "fa f32_f16 prefill512",
+        backend_ctx->queue);
+    if (!prog) { failed[split ? 1 : 0] = true; return false; }
+
+    cl_int err;
+    cl_kernel k = clCreateKernel(prog, "flash_attn_f32_f16", &err);
+    if (err != CL_SUCCESS) { clReleaseProgram(prog); failed[split ? 1 : 0] = true; return false; }
+    target[dk_dv] = k;
+    if (split) {
+        backend_ctx->fa.f32_f16_split_wg_size[dk_dv]       = cfg->bm * cfg->n_split;
+        backend_ctx->fa.f32_f16_split_nkv_threshold[dk_dv] = cfg->nkv_split_threshold;
+    }
+    ggml_opencl_log_fa_kernel_spill(backend_ctx, k,
+        split ? "flash_attn_f32_f16 (prefill512 split)" : "flash_attn_f32_f16 (prefill512)", dk, dv);
+    clReleaseProgram(prog);
+
+    // determine whether to use the K-image variant of the split tile
+    static const char * pkimg_build_env = getenv("GGML_OPENCL_FA_PREFILL_K_IMG");
+    const bool pkimg_build = (pkimg_build_env != NULL) && (pkimg_build_env[0] != '0');
+    if (split && pkimg_build && backend_ctx->fa.f32_f16_split_k_img.count(dk_dv) == 0) {
+        std::string opts_img = ggml_opencl_fa_compile_opts(backend_ctx, cfg, variant) +
+            " -D FA_PREFILL_ONLY -D FA_K_IMG -D FA_TILE_NAME=flash_attn_f32_f16_k_img";
+        cl_program prog_img = build_program_from_source_ex(
+            backend_ctx->context, backend_ctx->device,
+            ggml_opencl_fa_kernel_src(FA_VARIANT_F32_F16).c_str(), opts_img,
+            /*fatal=*/false, "fa f32_f16 prefill512 split k_img", backend_ctx->queue);
+        if (prog_img) {
+            cl_int err_img;
+            cl_kernel k_img = clCreateKernel(prog_img, "flash_attn_f32_f16_k_img", &err_img);
+            if (err_img == CL_SUCCESS) {
+                backend_ctx->fa.f32_f16_split_k_img[dk_dv] = k_img;
+                ggml_opencl_log_fa_kernel_spill(backend_ctx, k_img,
+                    "flash_attn_f32_f16 (prefill512 split k_img)", dk, dv);
+            }
+            clReleaseProgram(prog_img);
+        }
+    }
+    return true;
+}
+
 // Compile one (variant, dk, dv); memoised. false = compiler rejected.
 static bool ggml_opencl_ensure_fa_variant(ggml_backend_opencl_context * backend_ctx, int dk, int dv, ggml_opencl_fa_variant variant) {
     const std::pair<int, int> dk_dv = {dk, dv};
@@ -6466,7 +6587,16 @@ inline bool use_adreno_kernels(const ggml_backend_opencl_context *backend_ctx, c
 }
 
 inline bool use_adreno_moe_kernels(const ggml_backend_opencl_context *backend_ctx, const ggml_tensor *tensor) {
-    GGML_UNUSED(backend_ctx);
+    // The moe weight repack kernels *_trans4_ns alias a private ushort8 through a uchar*.
+    // Certain compilers (found with some A7x and A6x) miscompiles this, corrupting the weights.
+    // So, exclude A6x and A7x from using Adreno MoE kernels for now.
+    // The quants that have a general mul_mat_id kernel fallback to the general version; the
+    // rest fallback to CPU.
+    if (backend_ctx && (backend_ctx->adreno_gen == ADRENO_GPU_GEN::A6X ||
+                        backend_ctx->adreno_gen == ADRENO_GPU_GEN::A7X ||
+                        backend_ctx->adreno_gen == ADRENO_GPU_GEN::ADRENO_UNKNOWN)) {
+        return false;
+    }
     int ne01 = tensor->ne[1];
     return (((strstr(tensor->name, "ffn") != NULL) && (strstr(tensor->name, "exps") != NULL)) || (strstr(tensor->name, "as") != NULL)) && (ne01 % 32 == 0);
 }
@@ -6853,7 +6983,38 @@ static bool ggml_opencl_supports_op(ggml_backend_dev_t dev, const struct ggml_te
                 return false;
             }
 
-            return is_f32_f32 || is_f16_f16 || is_f32_f16 || is_f32_q8_0 || is_f32_q4_0 || is_f32_asym;
+            if (!(is_f32_f32 || is_f16_f16 || is_f32_f16 || is_f32_q8_0 || is_f32_q4_0 || is_f32_asym)) {
+                return false;
+            }
+
+            // Some compilers for A7x (Adreno 740, compiler E031.41) crashes when
+            // building FA kernels with mixed or quant types (f32_f16, f32_q8_0, f32_q4_0)
+            // Here we skip all A7x for these kernels to avoid crash
+            if (backend_ctx->adreno_gen == ADRENO_GPU_GEN::A7X &&
+                (is_f32_f16 || is_f32_q8_0 || is_f32_q4_0)) {
+                return false;
+            }
+
+            if (dk == 512) {
+                if (backend_ctx->gpu_family == INTEL) {
+                    return false;
+                }
+                if (!is_f32_f16) {
+                    return false;
+                }
+                if (q->ne[1] == 1) {
+                    // DK=512 decode is bandwidth-bound and slower on the GPU
+                    // than on the CPU; decline it here so it runs on the CPU.
+                    // Prefill (n_q > 1) stays on the GPU.
+                    return false;
+                } else {
+                    // prefill, BM-tile in its own FA_PREFILL_ONLY program
+                    if (!ggml_opencl_ensure_fa_f32_f16_prefill_512(backend_ctx, /*split=*/false)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
         default:
             return false;
