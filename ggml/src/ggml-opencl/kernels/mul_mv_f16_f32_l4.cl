@@ -22,6 +22,17 @@
 #define REQD_SUBGROUP_SIZE_128 __attribute__((qcom_reqd_sub_group_size("full")))
 #endif
 
+#ifdef cl_khr_subgroup_shuffle
+#pragma OPENCL EXTENSION cl_khr_subgroup_shuffle : enable
+#define HAS_SUBGROUP_SHUFFLE 1
+#elif defined(cl_qcom_subgroup_shuffle)
+#pragma OPENCL EXTENSION cl_qcom_subgroup_shuffle : enable
+#define HAS_SUBGROUP_SHUFFLE 1
+// Adreno compilers that expose only cl_qcom_subgroup_shuffle do not declare the KHR
+// name, so calling it is an implicit declaration and the program fails to build.
+// Route it to the qcom builtin.
+#define sub_group_shuffle_xor(val, mask) qcom_sub_group_shuffle_xor((val), (mask), CLK_SUB_GROUP_SHUFFLE_WIDTH_WAVE_SIZE_QCOM, (val))
+#endif
 // Assumes row size (ne00) is a multiple of 4
 #ifdef ADRENO_GPU
 REQD_SUBGROUP_SIZE_64
