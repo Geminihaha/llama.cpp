@@ -2734,7 +2734,7 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
                     " -D BLOCK_M=" + std::to_string(bm) +
                     " -D BLOCK_N=" + std::to_string(bn);
 
-                cl_program prog_f16 = build_program_from_source(backend_ctx->context, backend_ctx->device, kernel_src_f16.c_str(), OPTS);
+                cl_program prog_f16 = build_program_from_source(backend_ctx, kernel_src_f16.c_str(), OPTS);
                 cl_kernel k_f16, k_f16_q1;
                 CL_CHECK((k_f16 = clCreateKernel(prog_f16, "flash_attn_f16", &err), err));
                 CL_CHECK((k_f16_q1 = clCreateKernel(prog_f16, "flash_attn_f16_q1", &err), err));
@@ -2742,7 +2742,7 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
                 backend_ctx->fa.f16_q1[{dk, dv}] = k_f16_q1;
                 CL_CHECK(clReleaseProgram(prog_f16));
 
-                cl_program prog_f32 = build_program_from_source(backend_ctx->context, backend_ctx->device, kernel_src_f32.c_str(), OPTS);
+                cl_program prog_f32 = build_program_from_source(backend_ctx, kernel_src_f32.c_str(), OPTS);
                 cl_kernel k_f32, k_f32_q1;
                 CL_CHECK((k_f32 = clCreateKernel(prog_f32, "flash_attn_f32", &err), err));
                 CL_CHECK((k_f32_q1 = clCreateKernel(prog_f32, "flash_attn_f32_q1", &err), err));
@@ -2750,7 +2750,7 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
                 backend_ctx->fa.f32_q1[{dk, dv}] = k_f32_q1;
                 CL_CHECK(clReleaseProgram(prog_f32));
 
-                cl_program prog_f32_f16 = build_program_from_source(backend_ctx->context, backend_ctx->device, kernel_src_f32_f16.c_str(), OPTS);
+                cl_program prog_f32_f16 = build_program_from_source(backend_ctx, kernel_src_f32_f16.c_str(), OPTS);
                 cl_kernel k_f32_f16, k_f32_f16_q1;
                 CL_CHECK((k_f32_f16 = clCreateKernel(prog_f32_f16, "flash_attn_f32_f16", &err), err));
                 CL_CHECK((k_f32_f16_q1 = clCreateKernel(prog_f32_f16, "flash_attn_f32_f16_q1", &err), err));
@@ -2776,7 +2776,7 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
         const std::string kernel_src = read_file("argsort.cl");
 #endif
         backend_ctx->program_argsort_f32_i32 =
-            build_program_from_source(backend_ctx->context, backend_ctx->device, kernel_src.c_str(), compile_opts);
+            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
 
         CL_CHECK((backend_ctx->kernel_argsort_f32_i32 = clCreateKernel(backend_ctx->program_argsort_f32_i32, "kernel_argsort_f32_i32", &err), err));
         GGML_LOG_CONT("[argsort]");
@@ -4899,7 +4899,7 @@ static void ggml_opencl_ensure_fa_pre_kernels(ggml_backend_opencl_context * back
     const std::string src  = ggml_opencl_fa_kernel_src(FA_VARIANT_PRE);
     const std::string opts = ggml_opencl_fa_compile_opts(backend_ctx, cfg, FA_VARIANT_PRE);
 
-    cl_program prog = build_program_from_source(backend_ctx->context, backend_ctx->device, src.c_str(), opts);
+    cl_program prog = build_program_from_source(backend_ctx, src.c_str(), opts);
 
     cl_kernel k_kv_pad_f16, k_mask_pad_f16, k_blk_f16;
     CL_CHECK((k_kv_pad_f16  = clCreateKernel(prog, "flash_attn_kv_pad_f16",   &err), err));
