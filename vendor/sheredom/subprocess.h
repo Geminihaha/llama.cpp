@@ -1207,6 +1207,8 @@ cleanup:
   if (process_cwd) {
 #if defined(__APPLE__) && MAC_OS_X_VERSION_MIN_REQUIRED >= 260000
     posix_error = posix_spawn_file_actions_addchdir(&actions, process_cwd);
+#elif defined(__ANDROID__)
+    posix_error = ENOSYS;
 #else
 #if defined(__APPLE__) && defined(__clang__)
 #pragma clang diagnostic push
