@@ -49,7 +49,6 @@
 
 Termux 환경에서의 기본적인 빌드 절차는 다음과 같습니다 (원본 가이드 준수).
 
-
 - **Hugging Face cache migration: models downloaded with `-hf` are now stored in the standard Hugging Face cache directory, enabling sharing with other HF tools.**
 - **[guide : using the new WebUI of llama.cpp](https://github.com/ggml-org/llama.cpp/discussions/16938)**
 - [guide : running gpt-oss with llama.cpp](https://github.com/ggml-org/llama.cpp/discussions/15396)
@@ -614,3 +613,5 @@ to use a different version by changing the URL and checksum.
 
 ## Completions
 Command-line completion is available for some environments.
+
+#### Bash Completion
