@@ -16,7 +16,6 @@
 [![Docker](https://img.shields.io/github/actions/workflow/status/ggml-org/llama.cpp/docker.yml?label=Docker)](https://github.com/ggml-org/llama.cpp/actions/workflows/docker.yml)
 [![Winget](https://img.shields.io/github/actions/workflow/status/ggml-org/llama.cpp/winget.yml?label=Winget)](https://github.com/ggml-org/llama.cpp/actions/workflows/winget.yml)
 
-<<<<<<< HEAD
 ## 📌 출처 및 원본 프로젝트 (Original Source)
 
 모든 핵심 소스 코드와 로직의 저작권은 원본 작성자에게 있습니다. 원본 프로젝트에 대한 상세한 정보와 최신 업데이트는 아래 링크를 참조하세요.
