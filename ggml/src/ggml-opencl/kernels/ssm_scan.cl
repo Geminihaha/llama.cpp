@@ -8,15 +8,44 @@
 
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
-#ifdef cl_khr_subgroups
+#ifdef GGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8
+#pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
+#endif
+
+#ifdef cl_intel_subgroups
+#pragma OPENCL EXTENSION cl_intel_subgroups : enable
+#else
 #pragma OPENCL EXTENSION cl_khr_subgroups : enable
 #endif
 
-#if defined(cl_qcom_reqd_sub_group_size)
+#ifdef cl_intel_required_subgroup_size
+#pragma OPENCL EXTENSION cl_intel_required_subgroup_size : enable
+#define INTEL_GPU 1
+#define REQD_SUBGROUP_SIZE_16 __attribute__((intel_reqd_sub_group_size(16)))
+#define REQD_SUBGROUP_SIZE_32 __attribute__((intel_reqd_sub_group_size(32)))
+#elif defined(cl_qcom_reqd_sub_group_size)
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size : enable
-#define REQD_SUBGROUP_SIZE_64 __attribute__((qcom_reqd_sub_group_size("half")))
+#define ADRENO_GPU 1
+#define REQD_SUBGROUP_SIZE_64  __attribute__((qcom_reqd_sub_group_size("half")))
+#define REQD_SUBGROUP_SIZE_128 __attribute__((qcom_reqd_sub_group_size("full")))
+#endif
+
+#if defined(cl_qcom_subgroup_shuffle)
+#pragma OPENCL EXTENSION cl_qcom_subgroup_shuffle : enable
+#define ssm_sub_group_shuffle_xor(val, mask) qcom_sub_group_shuffle_xor((val), (mask), CLK_SUB_GROUP_SHUFFLE_WIDTH_WAVE_SIZE_QCOM, (val))
+static inline float ssm_subgroup_reduce_add(float val) {
+    val += ssm_sub_group_shuffle_xor(val, 1u);
+    val += ssm_sub_group_shuffle_xor(val, 2u);
+    val += ssm_sub_group_shuffle_xor(val, 4u);
+    val += ssm_sub_group_shuffle_xor(val, 8u);
+    val += ssm_sub_group_shuffle_xor(val, 16u);
+    val += ssm_sub_group_shuffle_xor(val, 32u);
+    return val;
+}
 #else
-#define REQD_SUBGROUP_SIZE_64
+static inline float ssm_subgroup_reduce_add(float val) {
+    return sub_group_reduce_add(val);
+}
 #endif
 
 inline float softplus_f32(float x) {
@@ -25,7 +54,9 @@ inline float softplus_f32(float x) {
 
 // d_state = 128 (most Mamba-2 models, e.g. mamba2-2.7B, Codestral-Mamba).
 // WG = 64 threads, each holds 2 state elements (tid and tid+64).
+#ifdef ADRENO_GPU
 REQD_SUBGROUP_SIZE_64
+#endif
 kernel void kernel_ssm_scan_f32_mamba2_d128(
     global const char * src0_base, ulong src0_off,
     global const char * src1_base, ulong src1_off,
@@ -103,7 +134,7 @@ kernel void kernel_ssm_scan_f32_mamba2_d128(
         state1 = state1 * dA + B1 * x_dt;
         const float partial = state0 * C0 + state1 * C1;
 
-        const float sum = sub_group_reduce_add(partial);
+        const float sum = ssm_subgroup_reduce_add(partial);
         if (tid == 0) {
             y_seq[(ulong)t * y_dim_total + (ulong)head_id * head_dim + dim_id] = sum;
         }
@@ -114,7 +145,9 @@ kernel void kernel_ssm_scan_f32_mamba2_d128(
 }
 
 // d_state = 256 (Falcon-H1). WG = 64 threads, each holds 4 state elements.
+#ifdef ADRENO_GPU
 REQD_SUBGROUP_SIZE_64
+#endif
 kernel void kernel_ssm_scan_f32_mamba2_d256(
     global const char * src0_base, ulong src0_off,
     global const char * src1_base, ulong src1_off,
@@ -203,7 +236,7 @@ kernel void kernel_ssm_scan_f32_mamba2_d256(
         state3 = state3 * dA + B3 * x_dt;
         const float partial = state0 * C0 + state1 * C1 + state2 * C2 + state3 * C3;
 
-        const float sum = sub_group_reduce_add(partial);
+        const float sum = ssm_subgroup_reduce_add(partial);
         if (tid == 0) {
             y_seq[(ulong)t * y_dim_total + (ulong)head_id * head_dim + dim_id] = sum;
         }
