@@ -215,7 +215,7 @@ REQD_SUBGROUP_SIZE_64
 #endif
 kernel void kernel_gemv_noshuffle_q5_k_f32(
         read_only  image1d_buffer_t src0_q,
-        read_only  image1d_buffer_t src0_qh,
+        global const ushort * src0_qh,
         global half2  * src0_d,
         global half2  * src0_m,
         global uchar  * src0_s,
@@ -272,10 +272,10 @@ kernel void kernel_gemv_noshuffle_q5_k_f32(
             regB.s4567 = read_imagef(src1, (1 + slid * 2 + k * 8));
         }
 
-        regH.s0 = as_ushort(read_imageh(src0_qh, (gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 0)).x);
-        regH.s1 = as_ushort(read_imageh(src0_qh, (gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 1)).x);
-        regH.s2 = as_ushort(read_imageh(src0_qh, (gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 2)).x);
-        regH.s3 = as_ushort(read_imageh(src0_qh, (gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 3)).x);
+        regH.s0 = src0_qh[gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 0];
+        regH.s1 = src0_qh[gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 1];
+        regH.s2 = src0_qh[gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 2];
+        regH.s3 = src0_qh[gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 3];
 
         regA.s0 = read_imageui(src0_q, (gid + k * BLOCK_STRIDE_A + LINE_STRIDE_A * 0)).x;
         regA.s1 = read_imageui(src0_q, (gid + k * BLOCK_STRIDE_A + LINE_STRIDE_A * 1)).x;
@@ -355,7 +355,7 @@ REQD_SUBGROUP_SIZE_64
 #endif
 kernel void kernel_gemv_noshuffle_q5_k_f32_mc3(
         read_only  image1d_buffer_t src0_q,
-        read_only  image1d_buffer_t src0_qh,
+        global const ushort * src0_qh,
         global half2  * src0_d,
         global half2  * src0_m,
         global uchar  * src0_s,
@@ -411,10 +411,10 @@ kernel void kernel_gemv_noshuffle_q5_k_f32_mc3(
         regM = convert_half2(convert_float2(dm) * convert_float2((uchar2)(mn0, mn1)));
 
         // high-bit plane + weights loaded ONCE, reused across the columns
-        regH.s0 = as_ushort(read_imageh(src0_qh, (gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 0)).x);
-        regH.s1 = as_ushort(read_imageh(src0_qh, (gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 1)).x);
-        regH.s2 = as_ushort(read_imageh(src0_qh, (gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 2)).x);
-        regH.s3 = as_ushort(read_imageh(src0_qh, (gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 3)).x);
+        regH.s0 = src0_qh[gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 0];
+        regH.s1 = src0_qh[gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 1];
+        regH.s2 = src0_qh[gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 2];
+        regH.s3 = src0_qh[gid + k * BLOCK_STRIDE_A_QH + LINE_STRIDE_A_QH * 3];
 
         regA_hi.s0 = read_imageui(src0_q, (gid + k * BLOCK_STRIDE_A + LINE_STRIDE_A * 0)).x;
         regA_hi.s1 = read_imageui(src0_q, (gid + k * BLOCK_STRIDE_A + LINE_STRIDE_A * 1)).x;
