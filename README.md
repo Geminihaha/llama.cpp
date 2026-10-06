@@ -74,6 +74,14 @@ Termux 환경에서의 기본적인 빌드 절차는 다음과 같습니다 (원
 
 A few options to get `llama.cpp` installed on your machine:
 
+```bash
+# curl
+curl -LsSf https://llama.app/install.sh | sh
+
+# powershell
+irm https://llama.app/install.ps1 | iex
+```
+
 - Visit https://llama.app and follow the instructions
 - Run with Docker - see our [Docker documentation](docs/docker.md)
 - Download pre-built binaries from the [releases page](https://github.com/ggml-org/llama.cpp/releases)
