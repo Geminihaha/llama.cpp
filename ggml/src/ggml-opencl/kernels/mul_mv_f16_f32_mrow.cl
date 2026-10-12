@@ -128,6 +128,8 @@ kernel void kernel_mul_mat_f16_f32_mrow(
     }
 }
 
+#ifndef ADRENO_GPU
+
 // Register-blocked variant: each 64-lane subgroup accumulates RPT consecutive
 // output rows instead of one. The staged activation is reused across all RPT rows,
 // and each lane keeps RPT independent weight loads in flight per column step ->
@@ -304,3 +306,4 @@ kernel void kernel_mul_mat_f16_f32_mrow_r4(
 ) {
     MROW_RB_BODY(4)
 }
+#endif
