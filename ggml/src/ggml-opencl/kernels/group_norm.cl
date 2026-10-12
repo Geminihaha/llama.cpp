@@ -1,12 +1,8 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
-#ifdef GGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8
-#pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
-#endif
-
 #ifdef cl_intel_subgroups
 #pragma OPENCL EXTENSION cl_intel_subgroups : enable
-#elif defined(cl_khr_subgroups)
+#else
 #pragma OPENCL EXTENSION cl_khr_subgroups : enable
 #endif
 
@@ -16,26 +12,16 @@
 #define REQD_SUBGROUP_SIZE_16 __attribute__((intel_reqd_sub_group_size(16)))
 #define REQD_SUBGROUP_SIZE_32 __attribute__((intel_reqd_sub_group_size(32)))
 #elif defined(cl_qcom_reqd_sub_group_size)
-// Some Adreno compilers crash with this extension even if it is reported as supported
-#ifndef GGML_OPENCL_USE_ADRENO_KERNELS
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size : enable
 #define ADRENO_GPU 1
 #define REQD_SUBGROUP_SIZE_64  __attribute__((qcom_reqd_sub_group_size("half")))
 #define REQD_SUBGROUP_SIZE_128 __attribute__((qcom_reqd_sub_group_size("full")))
-#else
-#define ADRENO_GPU 1
-#define REQD_SUBGROUP_SIZE_64
-#define REQD_SUBGROUP_SIZE_128
-#endif
-#else
-#define REQD_SUBGROUP_SIZE_64
-#define REQD_SUBGROUP_SIZE_128
 #endif
 
 // Workgroup must be a subgroup
 #ifdef INTEL_GPU
 REQD_SUBGROUP_SIZE_32
-#elif defined (ADRENO_GPU)
+#elif defined (ADRENO_GPU) && !defined(GGML_OPENCL_USE_ADRENO_KERNELS)
 REQD_SUBGROUP_SIZE_64
 #endif
 kernel void kernel_group_norm(
@@ -53,10 +39,7 @@ kernel void kernel_group_norm(
     int start = get_group_id(0) * group_size;
     int end   = start + group_size;
 
-    const int lid = get_local_id(0);
-    const int lsize = get_local_size(0);
-
-    start += lid;
+    start += get_local_id(0);
 
     if (end >= ne) {
         end = ne;
@@ -64,20 +47,19 @@ kernel void kernel_group_norm(
 
     float tmp = 0.0f;
 
-    for (int j = start; j < end; j += lsize) {
+    for (int j = start; j < end; j += get_local_size(0)) {
         tmp += src0[j];
     }
 
 #if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     tmp = sub_group_reduce_add(tmp);
 #else
-    // Fallback to local memory reduction for Adreno 6xx or OpenCL < 3.0 to avoid compiler crash
     local float l_sum[1024];
-    l_sum[lid] = tmp;
+    l_sum[get_local_id(0)] = tmp;
     barrier(CLK_LOCAL_MEM_FENCE);
-    for (int i = lsize / 2; i > 0; i /= 2) {
-        if (lid < i) {
-            l_sum[lid] += l_sum[lid + i];
+    for (int i = get_local_size(0) / 2; i > 0; i /= 2) {
+        if (get_local_id(0) < i) {
+            l_sum[get_local_id(0)] += l_sum[get_local_id(0) + i];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
@@ -87,7 +69,7 @@ kernel void kernel_group_norm(
     const float mean = tmp / group_size;
     tmp = 0.0f;
 
-    for (int j = start; j < end; j += lsize) {
+    for (int j = start; j < end; j += get_local_size(0)) {
         float xi = src0[j] - mean;
         dst[j] = xi;
         tmp += xi * xi;
@@ -96,12 +78,11 @@ kernel void kernel_group_norm(
 #if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     tmp = sub_group_reduce_add(tmp);
 #else
-    // Fallback to local memory reduction for Adreno 6xx or OpenCL < 3.0 to avoid compiler crash
-    l_sum[lid] = tmp;
+    l_sum[get_local_id(0)] = tmp;
     barrier(CLK_LOCAL_MEM_FENCE);
-    for (int i = lsize / 2; i > 0; i /= 2) {
-        if (lid < i) {
-            l_sum[lid] += l_sum[lid + i];
+    for (int i = get_local_size(0) / 2; i > 0; i /= 2) {
+        if (get_local_id(0) < i) {
+            l_sum[get_local_id(0)] += l_sum[get_local_id(0) + i];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
@@ -110,7 +91,7 @@ kernel void kernel_group_norm(
 
     const float variance = tmp / group_size;
     const float scale = 1.0f/sqrt(variance + eps);
-    for (int j = start; j < end; j += lsize) {
+    for (int j = start; j < end; j += get_local_size(0)) {
         dst[j] *= scale;
     }
 }
@@ -120,7 +101,7 @@ kernel void kernel_group_norm(
 //------------------------------------------------------------------------------
 #ifdef INTEL_GPU
 REQD_SUBGROUP_SIZE_32
-#elif defined (ADRENO_GPU)
+#elif defined (ADRENO_GPU) && !defined(GGML_OPENCL_USE_ADRENO_KERNELS)
 REQD_SUBGROUP_SIZE_64
 #endif
 kernel void kernel_group_norm_mul_add(
@@ -143,13 +124,10 @@ kernel void kernel_group_norm_mul_add(
         end = ne;
     }
 
-    const int lid = get_local_id(0);
-    const int lsize = get_local_size(0);
-
     float sum = 0.0f;
     float sum_sq = 0.0f;
 
-    for (int j = start + lid; j < end; j += lsize) {
+    for (int j = start + get_local_id(0); j < end; j += get_local_size(0)) {
         float val = src0[j];
         sum += val;
         sum_sq += val*val;
@@ -159,16 +137,15 @@ kernel void kernel_group_norm_mul_add(
     sum = sub_group_reduce_add(sum);
     sum_sq = sub_group_reduce_add(sum_sq);
 #else
-    // Fallback to local memory reduction for Adreno 6xx or OpenCL < 3.0 to avoid compiler crash
     local float l_sum[1024];
     local float l_sum_sq[1024];
-    l_sum[lid] = sum;
-    l_sum_sq[lid] = sum_sq;
+    l_sum[get_local_id(0)] = sum;
+    l_sum_sq[get_local_id(0)] = sum_sq;
     barrier(CLK_LOCAL_MEM_FENCE);
-    for (int i = lsize / 2; i > 0; i /= 2) {
-        if (lid < i) {
-            l_sum[lid] += l_sum[lid + i];
-            l_sum_sq[lid] += l_sum_sq[lid + i];
+    for (int i = get_local_size(0) / 2; i > 0; i /= 2) {
+        if (get_local_id(0) < i) {
+            l_sum[get_local_id(0)] += l_sum[get_local_id(0) + i];
+            l_sum_sq[get_local_id(0)] += l_sum_sq[get_local_id(0) + i];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
@@ -180,8 +157,7 @@ kernel void kernel_group_norm_mul_add(
     const float var = sum_sq / group_size - mean * mean;
     const float scale = rsqrt(var + eps);
 
-    for (int j = start + lid; j < end; j += lsize) {
+    for (int j = start + get_local_id(0); j < end; j += get_local_size(0)) {
         dst[j] = ((src0[j] - mean) * scale) * src1[j] + src2[j];
     }
 }
-

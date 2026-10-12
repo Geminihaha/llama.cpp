@@ -1,14 +1,18 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
-
-#ifdef GGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8
-#pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
-#endif
 #pragma OPENCL EXTENSION cl_khr_subgroups : enable
 
 #ifdef cl_qcom_reqd_sub_group_size
 #pragma OPENCL EXTENSION cl_qcom_reqd_sub_group_size : enable
 #define ADRENO_GPU 1
 #define REQD_SUBGROUP_SIZE_64 __attribute__((qcom_reqd_sub_group_size("half")))
+#endif
+
+// A6X compiler incorrectly constant-folds get_local_size() results;
+// force runtime materialization via a no-op ALU round-trip.
+#ifdef GGML_CL_A6X_CONSTFOLD_FIX
+#define MATERIALIZE_WG(x) do { (x) *= 2u; if ((x) > 1u) (x) /= 2u; } while(0)
+#else
+#define MATERIALIZE_WG(x)
 #endif
 
 // assume
@@ -331,6 +335,7 @@ __kernel void kernel_gemv_noshuffle_q4_0_f32_mc3(
     uint BLOCK_STRIDE_A = N_SIMDGROUP * M;   // = 4 * M (N_SIMDGROUP is the #define 4)
     uint COL_STRIDE     = K / 4;   // float4 pixels per activation column
     uint nsg            = get_local_size(1);  // runtime K-split (4 default, 8 small-M)
+    MATERIALIZE_WG(nsg);
 
     __private uint4  regA_hi, regA_lo;
     __private half2  regS;

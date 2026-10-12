@@ -1,11 +1,5 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
-
-#ifdef GGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8
-#pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
-#endif
-#ifdef cl_khr_subgroups
 #pragma OPENCL EXTENSION cl_khr_subgroups : enable
-#endif
 
 // Most devices have max workgroup size of 1024, so this is enough for subgroup
 // sizes of 16, 32, 64 and 128. Increase this value for smaller subgroups sizes
@@ -36,13 +30,13 @@ kernel void kernel_sum_rows_f32(
     const int lid = get_local_id(0);
     const int lsize = get_local_size(0);
 
-#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     const uint sg_size = get_sub_group_size();
     const uint sg_id = get_sub_group_id();
     const uint sg_lid = get_sub_group_local_id();
-#endif
 
-    __local float lmem[1024];
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
+    __local float lmem[MAX_SUBGROUPS];
+#endif
 
     if (i3 >= ne03 || i2 >= ne02 || i1 >= ne01) {
         return;
@@ -51,10 +45,6 @@ kernel void kernel_sum_rows_f32(
 #if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     if(sg_id == 0){
         lmem[sg_lid] = 0.0f;
-    }
-#else
-    if (lid < 1024) {
-        lmem[lid] = 0.0f;
     }
 #endif
 
@@ -81,16 +71,16 @@ kernel void kernel_sum_rows_f32(
     sumf = lmem[sg_lid];
     sumf = sub_group_reduce_add(sumf);
 #else
-    // Fallback to local memory reduction for Adreno 6xx or OpenCL < 3.0 to avoid compiler crash
-    lmem[lid] = sumf;
+    local float l_sum[1024];
+    l_sum[lid] = sumf;
     barrier(CLK_LOCAL_MEM_FENCE);
     for (int i = lsize / 2; i > 0; i /= 2) {
         if (lid < i) {
-            lmem[lid] += lmem[lid + i];
+            l_sum[lid] += l_sum[lid + i];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
-    sumf = lmem[0];
+    sumf = l_sum[0];
 #endif
 
     if (lid == 0) {
@@ -124,13 +114,13 @@ kernel void kernel_sum_rows_f32_4(
     const int lid = get_local_id(0);
     const int lsize = get_local_size(0);
 
-#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     const uint sg_size = get_sub_group_size();
     const uint sg_id = get_sub_group_id();
     const uint sg_lid = get_sub_group_local_id();
-#endif
 
-    __local float lmem[1024];
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
+    __local float lmem[MAX_SUBGROUPS];
+#endif
 
     if (i3 >= ne03 || i2 >= ne02 || i1 >= ne01) {
         return;
@@ -139,10 +129,6 @@ kernel void kernel_sum_rows_f32_4(
 #if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     if(sg_id == 0){
         lmem[sg_lid] = 0.0f;
-    }
-#else
-    if (lid < 1024) {
-        lmem[lid] = 0.0f;
     }
 #endif
 
@@ -156,7 +142,6 @@ kernel void kernel_sum_rows_f32_4(
     }
 
     float sumf = dot(sum_vec, (float4)(1.0f));
-
 #if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     sumf = sub_group_reduce_add(sumf);
 
@@ -171,20 +156,19 @@ kernel void kernel_sum_rows_f32_4(
     sumf = lmem[sg_lid];
     sumf = sub_group_reduce_add(sumf);
 #else
-    // Fallback to local memory reduction for Adreno 6xx or OpenCL < 3.0 to avoid compiler crash
-    lmem[lid] = sumf;
+    local float l_sum[1024];
+    l_sum[lid] = sumf;
     barrier(CLK_LOCAL_MEM_FENCE);
     for (int i = lsize / 2; i > 0; i /= 2) {
         if (lid < i) {
-            lmem[lid] += lmem[lid + i];
+            l_sum[lid] += l_sum[lid + i];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
-    sumf = lmem[0];
+    sumf = l_sum[0];
 #endif
 
     if (lid == 0) {
         dst_row[0] = sumf;
     }
 }
-
