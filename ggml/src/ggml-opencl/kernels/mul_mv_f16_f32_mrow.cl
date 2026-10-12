@@ -18,36 +18,6 @@
 #define REQD_SUBGROUP_SIZE_128 __attribute__((qcom_reqd_sub_group_size("full")))
 #endif
 
-#if defined(cl_khr_subgroup_shuffle)
-#pragma OPENCL EXTENSION cl_khr_subgroup_shuffle : enable
-#define mrow_sub_group_shuffle_xor(val, mask) sub_group_shuffle_xor((val), (mask))
-static inline float mrow_subgroup_reduce_add(float val) {
-    val += mrow_sub_group_shuffle_xor(val, 1u);
-    val += mrow_sub_group_shuffle_xor(val, 2u);
-    val += mrow_sub_group_shuffle_xor(val, 4u);
-    val += mrow_sub_group_shuffle_xor(val, 8u);
-    val += mrow_sub_group_shuffle_xor(val, 16u);
-    val += mrow_sub_group_shuffle_xor(val, 32u);
-    return val;
-}
-#elif defined(cl_qcom_subgroup_shuffle)
-#pragma OPENCL EXTENSION cl_qcom_subgroup_shuffle : enable
-#define mrow_sub_group_shuffle_xor(val, mask) qcom_sub_group_shuffle_xor((val), (mask), CLK_SUB_GROUP_SHUFFLE_WIDTH_WAVE_SIZE_QCOM, (val))
-static inline float mrow_subgroup_reduce_add(float val) {
-    val += mrow_sub_group_shuffle_xor(val, 1u);
-    val += mrow_sub_group_shuffle_xor(val, 2u);
-    val += mrow_sub_group_shuffle_xor(val, 4u);
-    val += mrow_sub_group_shuffle_xor(val, 8u);
-    val += mrow_sub_group_shuffle_xor(val, 16u);
-    val += mrow_sub_group_shuffle_xor(val, 32u);
-    return val;
-}
-#else
-static inline float mrow_subgroup_reduce_add(float val) {
-    return sub_group_reduce_add(val);
-}
-#endif
-
 // Multi-row f16xf32 GEMV for the DECODE path (single token, ne11*ne12 small).
 // The legacy kernel_mul_mat_f16_f32_1row runs ONE 64-lane subgroup per workgroup =
 // one output row per WG, which caps memory-level parallelism at roughly half of
@@ -134,7 +104,7 @@ kernel void kernel_mul_mat_f16_f32_mrow(
         for (int i = lid; i < ne00; i += get_sub_group_size()) {
             sumf += (float) x[i] * ysh[i];
         }
-        float all_sum = mrow_subgroup_reduce_add(sumf);
+        float all_sum = sub_group_reduce_add(sumf);
         if (lid == 0) {
             dst[im*ne1*ne0 + r1*ne0 + r0] = all_sum;
         }
@@ -148,7 +118,7 @@ kernel void kernel_mul_mat_f16_f32_mrow(
             sumf += (float) x4[i].s2 * yv.s2;
             sumf += (float) x4[i].s3 * yv.s3;
         }
-        float all_sum = mrow_subgroup_reduce_add(sumf);
+        float all_sum = sub_group_reduce_add(sumf);
         if (lid == 0) {
             for (int i = 4*(ne00/4); i < ne00; ++i) {
                 all_sum += (float) x[i] * ysh[i];
@@ -205,13 +175,13 @@ kernel void kernel_mul_mat_f16_f32_mrow(
     }                                                                                     \
     _Pragma("unroll")                                                                     \
     for (int rr = 0; rr < (RPT); ++rr) {                                                  \
-        float s = mrow_subgroup_reduce_add(sumf[rr]);                                     \
+        float s = sub_group_reduce_add(sumf[rr]);                                         \
         int row = r0b + rr;                                                               \
         if (lid == 0 && row < ne01) {                                                     \
             dst[im*ne1*ne0 + r1*ne0 + row] = s;                                           \
         }                                                                                 \
     }
- 
+
 // half8 (128-bit) load variant: Adreno's load/store unit issues 128-bit
 // transactions, so half4 (64-bit) loads may leave the load path half-idle. This
 // processes 8 weight elements per lane per step via half8. Accumulation groups
@@ -260,7 +230,7 @@ kernel void kernel_mul_mat_f16_f32_mrow(
     }                                                                                     \
     _Pragma("unroll")                                                                     \
     for (int rr = 0; rr < (RPT); ++rr) {                                                  \
-        float s = mrow_subgroup_reduce_add(sumf[rr]);                                     \
+        float s = sub_group_reduce_add(sumf[rr]);                                         \
         int row = r0b + rr;                                                               \
         if (lid == 0 && row < ne01) {                                                     \
             dst[im*ne1*ne0 + r1*ne0 + row] = s;                                           \

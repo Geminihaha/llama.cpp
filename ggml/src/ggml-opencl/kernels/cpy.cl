@@ -1,9 +1,5 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
-#ifdef GGML_OPENCL_ADRENO_HAS_DOT_PRODUCT8
-#pragma OPENCL EXTENSION cl_qcom_dot_product8 : enable
-#endif
-
 //------------------------------------------------------------------------------
 // cpy
 //------------------------------------------------------------------------------
@@ -187,6 +183,7 @@ kernel void kernel_cpy_f32_f32(
     }
 }
 
+#ifndef GGML_CL_NO_CPY_PACK
 kernel void kernel_cpy_f32_f32_pack(
         global float * src0,
         ulong offset0,
@@ -245,6 +242,7 @@ kernel void kernel_cpy_f32_f32_pack(
         dst_data[i00] = src[0];
     }
 }
+#endif // GGML_CL_NO_CPY_PACK
 
 kernel void kernel_cpy_i32_i32(
         global int * src0,
