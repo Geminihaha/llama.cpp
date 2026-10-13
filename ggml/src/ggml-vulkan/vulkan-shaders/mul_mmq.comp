@@ -200,10 +200,8 @@ void main() {
             const uint ib = pos_a_ib + buf_ib * p.stride_a / BK;
             const uint iqs = loadr_a;
 
-             for (uint k_step = 0; k_step < BK_STEP; k_step++) {
-                if (block + k_step * BK < end_k) {
-                    block_a_to_shmem(k_step * BM + buf_ib, ib + k_step, iqs);
-                }
+            [[unroll]] for (uint k_step = 0; k_step < BK_STEP; k_step++) {
+                block_a_to_shmem(k_step * BM + buf_ib, ib + k_step, iqs, block + k_step * BK < end_k);
             }
         }
          for (uint l = 0; loadc_b + l < BN; l += loadstride_b) {
