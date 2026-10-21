@@ -1256,6 +1256,7 @@ struct ggml_backend_opencl_context {
     cl_kernel kernel_gemm_noshuffle_q4_1_f32;
     cl_kernel kernel_gemm_noshuffle_q8_0_f32, kernel_gemm_noshuffle_q8_0_f32_bin;
     cl_kernel kernel_gemm_noshuffle_q8_0_q8_1_dp4a = nullptr;  // dp4a (int8) dense q8_0 prefill GEMM (opt-in)
+    cl_kernel kernel_gemm_noshuffle_q8_0_q8_1_dp4a_act_vload4 = nullptr;
     cl_kernel kernel_gemm_noshuffle_q8_0_q8_1_dp4a_wimg = nullptr;  // q8_0 dense dp4a, weights via texture (opt-in)
     cl_kernel kernel_gemm_noshuffle_q8_0_q8_1_dp4a_ila_a8_bin = nullptr;
     cl_kernel kernel_gemv_noshuffle_q8_0_f32;
@@ -1277,6 +1278,7 @@ struct ggml_backend_opencl_context {
     cl_kernel kernel_gemm_noshuffle_q4_k_q8_1_dp4a_ila_a8_bin;
     cl_kernel kernel_gemv_noshuffle_q4_k_f32_32b_trans;
     cl_kernel kernel_gemm_noshuffle_q4_k_q8_1_dp4a = nullptr;  // dp4a (int8) dense prefill GEMM
+    cl_kernel kernel_gemm_noshuffle_q4_k_q8_1_dp4a_act_vload4 = nullptr;
     cl_kernel kernel_gemm_noshuffle_q4_k_q8_1_dp4a_wimg = nullptr;  // dp4a dense prefill GEMM, weights via texture (X1 opt-in)
     cl_kernel kernel_gemm_noshuffle_q4_k_q8_1_dp4a_narrow = nullptr;
     cl_kernel kernel_gemm_noshuffle_q4_k_q8_1_dp4a_narrow_wimg = nullptr;
@@ -1284,7 +1286,9 @@ struct ggml_backend_opencl_context {
     int tile_n_dp4a_narrow_q4_k = 32;
     int max_n_dp4a_narrow_q4_k = 16;
     cl_kernel kernel_gemm_noshuffle_q5_k_q8_1_dp4a = nullptr;  // dp4a (int8) dense q5_K prefill GEMM
+    cl_kernel kernel_gemm_noshuffle_q5_k_q8_1_dp4a_act_vload4 = nullptr;
     cl_kernel kernel_gemm_noshuffle_q6_k_q8_1_dp4a = nullptr;  // dp4a (int8) dense q6_K prefill GEMM
+    cl_kernel kernel_gemm_noshuffle_q6_k_q8_1_dp4a_act_vload4 = nullptr;
     cl_kernel kernel_quant_a_q8_1;                    // plain activation q8_1 pre-pass
     cl_kernel kernel_gemm_noshuffle_q4_k_f32_r1;
     cl_kernel kernel_gemm_noshuffle_q4_k_f32_kimg;
@@ -1318,6 +1322,7 @@ struct ggml_backend_opencl_context {
     cl_kernel kernel_gemm_noshuffle_iq4_nl_f32;
     cl_kernel kernel_gemm_noshuffle_iq4_nl_q8_1_dp4a = nullptr;  // dp4a (int8) dense IQ4_NL prefill GEMM
     cl_kernel kernel_gemm_noshuffle_q4_0_q8_1_dp4a = nullptr;  // dp4a (int8) dense q4_0 prefill GEMM
+    cl_kernel kernel_gemm_noshuffle_q4_0_q8_1_dp4a_act_vload4 = nullptr;
     cl_kernel kernel_gemm_coopk_q4_0_q8_1_dp4a_c4 = nullptr;
     cl_kernel kernel_gemm_coopk_q4_0_q8_1_dp4a_c2 = nullptr;
     int       nsg_coopk_dp4a_q4_0  = 8;
@@ -4389,6 +4394,7 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
 #endif
         cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
         CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q4_0_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_noshuffle_q4_0_q8_1_dp4a", &err), err));
+        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q4_0_q8_1_dp4a_act_vload4 = clCreateKernel(prog, "kernel_gemm_noshuffle_q4_0_q8_1_dp4a_act_vload4", &err), err));
         CL_CHECK(clReleaseProgram(prog));
         GGML_LOG_CONT(".");
     }
@@ -4528,6 +4534,7 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
         cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), dp4a_opts);
         CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_noshuffle_q4_k_q8_1_dp4a", &err), err));
         CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a_wimg = clCreateKernel(prog, "kernel_gemm_noshuffle_q4_k_q8_1_dp4a_wimg", &err), err));
+        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a_act_vload4 = clCreateKernel(prog, "kernel_gemm_noshuffle_q4_k_q8_1_dp4a_act_vload4", &err), err));
         CL_CHECK(clReleaseProgram(prog));
 
         // Compile a smaller N tile to avoid unused columns in small batches.
@@ -4560,6 +4567,7 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
         cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
         CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q8_0_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_noshuffle_q8_0_q8_1_dp4a", &err), err));
         CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q8_0_q8_1_dp4a_wimg = clCreateKernel(prog, "kernel_gemm_noshuffle_q8_0_q8_1_dp4a_wimg", &err), err));
+        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q8_0_q8_1_dp4a_act_vload4 = clCreateKernel(prog, "kernel_gemm_noshuffle_q8_0_q8_1_dp4a_act_vload4", &err), err));
         CL_CHECK(clReleaseProgram(prog));
         GGML_LOG_CONT(".");
     }
@@ -4575,6 +4583,7 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
 #endif
         cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
         CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q5_k_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_noshuffle_q5_k_q8_1_dp4a", &err), err));
+        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q5_k_q8_1_dp4a_act_vload4 = clCreateKernel(prog, "kernel_gemm_noshuffle_q5_k_q8_1_dp4a_act_vload4", &err), err));
         CL_CHECK(clReleaseProgram(prog));
         GGML_LOG_CONT(".");
     }
@@ -4590,6 +4599,7 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
 #endif
         cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
         CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q6_k_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_noshuffle_q6_k_q8_1_dp4a", &err), err));
+        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q6_k_q8_1_dp4a_act_vload4 = clCreateKernel(prog, "kernel_gemm_noshuffle_q6_k_q8_1_dp4a_act_vload4", &err), err));
         CL_CHECK(clReleaseProgram(prog));
         GGML_LOG_CONT(".");
     }
@@ -20476,11 +20486,13 @@ static void ggml_cl_mul_mat_q4_0_f32_adreno(ggml_backend_t backend, const ggml_t
             return;
         }
 
-        // dp4a (int8) dense prefill GEMM, default off
+        static const char * q4_0_act_vload4_env = getenv("GGML_OPENCL_Q4_0_DP4A_ACT_VLOAD4");
+        const bool q4_0_act_vload4_on = q4_0_act_vload4_env == nullptr || atoi(q4_0_act_vload4_env) != 0;
+        // Enable dense prefill by default on X2E when the uint4 activation tile is enabled.
         static const char * q4_0_dense_dp4a_env = getenv("GGML_OPENCL_Q4_0_DENSE_DP4A");
         bool q4_0_dense_dp4a_on = q4_0_dense_dp4a_env
             ? (atoi(q4_0_dense_dp4a_env) != 0)
-            : false;
+            : (backend_ctx->adreno_gen == ADRENO_GPU_GEN::X2E && q4_0_act_vload4_on);
         // dot prod has to be available
         q4_0_dense_dp4a_on = backend_ctx->has_integer_dot && q4_0_dense_dp4a_on;
 
@@ -20507,7 +20519,9 @@ static void ggml_cl_mul_mat_q4_0_f32_adreno(ggml_backend_t backend, const ggml_t
             size_t q_global[1] = { (size_t)(((n_blocks + 63) / 64) * 64) };
             backend_ctx->enqueue_ndrange_kernel(qk, 1, q_global, q_local, dst);
 
-            cl_kernel dk = backend_ctx->kernel_gemm_noshuffle_q4_0_q8_1_dp4a;
+            cl_kernel dk = q4_0_act_vload4_on
+                         ? backend_ctx->kernel_gemm_noshuffle_q4_0_q8_1_dp4a_act_vload4
+                         : backend_ctx->kernel_gemm_noshuffle_q4_0_q8_1_dp4a;
             int ai = 0;
             CL_CHECK(clSetKernelArg(dk, ai++, sizeof(cl_mem),   &extra0_q4_0->q));
             CL_CHECK(clSetKernelArg(dk, ai++, sizeof(cl_mem),   &extra0_q4_0->d));
@@ -21800,8 +21814,13 @@ static void ggml_cl_mul_mat_q8_0_f32_adreno(ggml_backend_t backend, const ggml_t
                 }
             }
 
-            cl_kernel dk = use_wimg ? backend_ctx->kernel_gemm_noshuffle_q8_0_q8_1_dp4a_wimg
-                                    : backend_ctx->kernel_gemm_noshuffle_q8_0_q8_1_dp4a;
+            static const char * q8_0_act_vload4_env = getenv("GGML_OPENCL_Q8_0_DP4A_ACT_VLOAD4");
+            const bool q8_0_act_vload4_on = q8_0_act_vload4_env == nullptr || atoi(q8_0_act_vload4_env) != 0;
+            cl_kernel dk = use_wimg
+                ? backend_ctx->kernel_gemm_noshuffle_q8_0_q8_1_dp4a_wimg
+                : q8_0_act_vload4_on
+                    ? backend_ctx->kernel_gemm_noshuffle_q8_0_q8_1_dp4a_act_vload4
+                    : backend_ctx->kernel_gemm_noshuffle_q8_0_q8_1_dp4a;
             int ai = 0;
             if (use_wimg) {
                 CL_CHECK(clSetKernelArg(dk, ai++, sizeof(cl_mem), &q8_q_img));
@@ -22749,11 +22768,16 @@ static void ggml_cl_mul_mat_q4_k_f32_adreno(ggml_backend_t backend, const ggml_t
 
             const bool use_narrow = backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a_narrow != nullptr
                                  && N <= backend_ctx->max_n_dp4a_narrow_q4_k;
+            static const char * q4_k_act_vload4_env = getenv("GGML_OPENCL_Q4_K_DP4A_ACT_VLOAD4");
+            const bool q4_k_act_vload4_on = q4_k_act_vload4_env == nullptr || atoi(q4_k_act_vload4_env) != 0;
             cl_kernel dk = use_narrow
                 ? (use_wimg ? backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a_narrow_wimg
                             : backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a_narrow)
-                : (use_wimg ? backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a_wimg
-                            : backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a);
+                : use_wimg
+                    ? backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a_wimg
+                    : q4_k_act_vload4_on
+                        ? backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a_act_vload4
+                        : backend_ctx->kernel_gemm_noshuffle_q4_k_q8_1_dp4a;
             int ai = 0;
             if (use_wimg) {
                 CL_CHECK(clSetKernelArg(dk, ai++, sizeof(cl_mem), &q4k_q_img));
@@ -23415,7 +23439,11 @@ static void ggml_cl_mul_mat_q6_K_f32_adreno(ggml_backend_t backend, const ggml_t
             size_t q_global[1] = { (size_t)(((n_blocks + 63) / 64) * 64) };
             backend_ctx->enqueue_ndrange_kernel(qk, 1, q_global, q_local, dst);
 
-            cl_kernel dk = backend_ctx->kernel_gemm_noshuffle_q6_k_q8_1_dp4a;
+            static const char * q6_k_act_vload4_env = getenv("GGML_OPENCL_Q6_K_DP4A_ACT_VLOAD4");
+            const bool q6_k_act_vload4_on = q6_k_act_vload4_env == nullptr || atoi(q6_k_act_vload4_env) != 0;
+            cl_kernel dk = q6_k_act_vload4_on
+                         ? backend_ctx->kernel_gemm_noshuffle_q6_k_q8_1_dp4a_act_vload4
+                         : backend_ctx->kernel_gemm_noshuffle_q6_k_q8_1_dp4a;
             int ai = 0;
             CL_CHECK(clSetKernelArg(dk, ai++, sizeof(cl_mem),   &extra0_q6_K->ql));
             CL_CHECK(clSetKernelArg(dk, ai++, sizeof(cl_mem),   &extra0_q6_K->qh));
@@ -23971,7 +23999,11 @@ static void ggml_cl_mul_mat_q5_K_f32_adreno(ggml_backend_t backend, const ggml_t
             size_t q_global[1] = { (size_t)(((n_blocks + 63) / 64) * 64) };
             backend_ctx->enqueue_ndrange_kernel(qk, 1, q_global, q_local, dst);
 
-            cl_kernel dk = backend_ctx->kernel_gemm_noshuffle_q5_k_q8_1_dp4a;
+            static const char * q5_k_act_vload4_env = getenv("GGML_OPENCL_Q5_K_DP4A_ACT_VLOAD4");
+            const bool q5_k_act_vload4_on = q5_k_act_vload4_env == nullptr || atoi(q5_k_act_vload4_env) != 0;
+            cl_kernel dk = q5_k_act_vload4_on
+                         ? backend_ctx->kernel_gemm_noshuffle_q5_k_q8_1_dp4a_act_vload4
+                         : backend_ctx->kernel_gemm_noshuffle_q5_k_q8_1_dp4a;
             int ai = 0;
             CL_CHECK(clSetKernelArg(dk, ai++, sizeof(cl_mem),   &extra0_q5_k->q));
             CL_CHECK(clSetKernelArg(dk, ai++, sizeof(cl_mem),   &extra0_q5_k->qh));
