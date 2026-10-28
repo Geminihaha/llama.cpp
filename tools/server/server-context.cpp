@@ -529,6 +529,12 @@ struct server_slot {
             return false;
         }
 
+        // lfm3 d1 has no memory, its prompt is read as one flat ubatch and the short convs would mix the sequences
+        // TODO: batch them along the sequence dimension, this needs ubatches of sequences with unequal lengths
+        if (task->decision.no_batching || other_slot.task->decision.no_batching) {
+            return false;
+        }
+
         return task->type == other_slot.task->type
             && inp_embd.size() == other_slot.inp_embd.size()
             && are_lora_equal(lora, other_slot.lora);
@@ -1721,7 +1727,7 @@ private:
             {
                 auto caps = common_chat_templates_get_caps(chat_params.tmpls.get());
                 auto it = params_base.default_template_kwargs.find("preserve_reasoning");
-                bool supported = caps.at("supports_preserve_reasoning");
+                bool supported = caps.at("supports_preserve_reasoning").get<bool>();
                 bool specified = params_base.preserve_reasoning_specified;
                 // note: the kwarg is enabled by default if not specified explicitly, so check the value
                 bool enabled = it != params_base.default_template_kwargs.end() && it->second == "true";
@@ -2473,7 +2479,14 @@ private:
 
         const auto & decision = slot.task->decision;
 
-        if (!decision.labels.empty()) {
+        if (decision.pooled) {
+            const float * embd = llama_get_embeddings_seq(slot.ctx_tgt, slot.id);
+            if (embd == nullptr) {
+                send_error(slot, "failed to get the class scores", ERROR_TYPE_SERVER);
+                return;
+            }
+            res->scores.assign(embd, embd + llama_model_n_embd_out(model_tgt));
+        } else if (!decision.labels.empty()) {
             const float * logits = llama_get_logits_ith(slot.ctx_tgt, i_batch);
             if (logits == nullptr) {
                 send_error(slot, "failed to get logits", ERROR_TYPE_SERVER);
@@ -2964,6 +2977,11 @@ private:
             case SERVER_TASK_TYPE_TTS:
             case SERVER_TASK_TYPE_DECISION:
                 {
+                    if (task.need_sampling() && !decision.can_generate()) {
+                        send_error(task, "This model is a decision model without text generation, use /v1/systemone", ERROR_TYPE_NOT_SUPPORTED);
+                        break;
+                    }
+
                     // special case: if input is provided via CLI, tokenize it first
                     // otherwise, no need to tokenize as it's already done inside the HTTP thread
                     if (task.cli) {
@@ -3412,7 +3430,9 @@ private:
             return true; // rows from a previous step, not decoded yet
         }
 
-        // every produced row is decoded and its delta queued, the commits ending there are complete
+        const int32_t n = mtmd_audio_stream_step(slot.audio_stream.get(), slot.sampled);
+
+        // complete the commits whose rows have their text sampled, before the new rows: their text goes to the next item
         const int64_t n_rows = mtmd_audio_stream_get_n_rows(slot.audio_stream.get());
         while (!slot.audio_commit_rows.empty() && slot.audio_commit_rows.front() <= n_rows) {
             slot.audio_commit_rows.pop_front();
@@ -3428,7 +3448,6 @@ private:
             queue_results.send(std::move(res));
         }
 
-        const int32_t n = mtmd_audio_stream_step(slot.audio_stream.get(), slot.sampled);
         if (n > 0) {
             const float * rows = mtmd_audio_stream_get_output_embd(slot.audio_stream.get());
             slot.inp_embd.assign(rows, rows + (size_t) n * batch.n_embd);
@@ -3942,7 +3961,8 @@ private:
                         }
 
                         // TODO: support memory-less logits computation
-                        if (slot.task->need_logits() && !llama_get_memory(ctx_tgt)) {
+                        // a decision reads its logits from the one batch of its prompt
+                        if (slot.task->need_logits() && !llama_get_memory(ctx_tgt) && slot.task->type != SERVER_TASK_TYPE_DECISION) {
                             send_error(slot, "the current context does not support logits computation. skipping", ERROR_TYPE_SERVER);
                             slot.release();
                             return;
@@ -5130,7 +5150,8 @@ server_context_meta server_context::get_meta() const {
         /* has_inp_video           */ impl->chat_params.allow_video,
         /* has_cap_chat            */ impl->has_cap_chat(),
         /* has_cap_tts             */ impl->has_cap_tts(),
-        /* has_audio_stream        */ impl->mtmd_cap.audio_stream,
+        // only realtime transcription models (no chat) stream without a prompt
+        /* has_audio_stream        */ impl->mtmd_cap.audio_stream && !impl->mtmd_cap.chat,
         /* json_ui_settings        */ impl->json_ui_settings,
         /* slot_n_ctx              */ impl->n_ctx_slot(),
         /* pooling_type            */ llama_pooling_type(impl->ctx_tgt),
@@ -6355,8 +6376,13 @@ void server_routes::init_routes() {
         server_task task(SERVER_TASK_TYPE_TTS);
         server_schema::eval_tts_schema(params, task, body);
         const bool stream = task.params.stream;
-        task.tts_inp.set_prompt(prompt);
-        task.tts_inp.set_lang(json_value(body, "lang", std::string()));
+        // a model with a "tts" chat template (e.g. LFM3-Audio) speaks the prompt rendered from it
+        const std::string lang       = json_value(body, "lang", std::string());
+        const std::string voice      = json_value(body, "voice", std::string());
+        const std::string tts_prompt = common_chat_get_tts_prompt(meta->chat_params.tmpls.get(), prompt, lang, voice);
+        task.tts_inp.set_prompt(tts_prompt.empty() ? prompt : tts_prompt);
+        task.tts_inp.set_lang(lang);
+        task.tts_inp.set_voice(voice);
         task.tts_inp.data.stream    = stream;
         task.tts_inp.data.out_type  = response_format == "pcm"
             ? MTMD_HELPER_GEN_AUDIO_OUTTYPE_PCM
