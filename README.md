@@ -3,7 +3,7 @@
 이 프로젝트는 [ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)를 포크한 저장소입니다.
 주요 목적은 **Android(Termux)** 환경에서 LLM(Large Language Model)을 효율적으로 구동하기 위한 빌드 최적화 및 성능 테스트입니다.
 
-![llama.cpp](https://raw.githubusercontent.com/ggml-org/llama.brand/refs/heads/master/logo/svg/cover/llama-cpp/cover-llama-cpp-dark.svg)
+![llama.cpp](https://raw.githubusercontent.com/ggml-org/llama-brand/refs/heads/master/logo/svg/cover/llama-cpp/cover-llama-cpp-dark.svg)
 
 <div align="center">
 
