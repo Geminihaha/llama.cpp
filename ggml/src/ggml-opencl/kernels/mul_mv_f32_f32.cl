@@ -117,6 +117,7 @@ kernel void kernel_mul_mat_f32_f32(
     }
 }
 
+#if !defined(GGML_OPENCL_USE_ADRENO_KERNELS) || __OPENCL_VERSION__ >= 300
 // Each group computes two rows and four columns, with 32 lanes per row.
 kernel void kernel_mul_mv_f32_f32_r2(
         global const char * src0,
@@ -183,3 +184,4 @@ kernel void kernel_mul_mv_f32_f32_r2(
         if (col + 3 < ne11) dst[im*ne1*ne0 + (col + 3)*ne0 + row] = part[lid].s3;
     }
 }
+#endif

@@ -48,6 +48,9 @@ kernel void kernel_soft_max_4_f16(
         float m1,
         int n_head_log2
 ) {
+#if !(defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS)))
+    local float l_red[64];
+#endif
     src0 = src0 + offset0;
     src1 = src1 + offset1;
     src2 = src2 + offset2;
@@ -85,7 +88,20 @@ kernel void kernel_soft_max_4_f16(
     }
     float lmax = fmax(fmax(lmax4.s0, lmax4.s1), fmax(lmax4.s2, lmax4.s3));
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     const float max = sub_group_reduce_max(lmax);
+#else
+    l_red[get_local_id(0)] = lmax;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int s = get_local_size(0) / 2; s > 0; s /= 2) {
+        if (get_local_id(0) < s) {
+            l_red[get_local_id(0)] = fmax(l_red[get_local_id(0)], l_red[get_local_id(0) + s]);
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    const float max = l_red[0];
+    barrier(CLK_LOCAL_MEM_FENCE);
+#endif
 
     // parallel sum
     float4 lsum4 = 0.0f;
@@ -96,7 +112,19 @@ kernel void kernel_soft_max_4_f16(
     }
     float lsum = lsum4.s0 + lsum4.s1 + lsum4.s2 + lsum4.s3;
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     float sum = sub_group_reduce_add(lsum);
+#else
+    l_red[get_local_id(0)] = lsum;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int s = get_local_size(0) / 2; s > 0; s /= 2) {
+        if (get_local_id(0) < s) {
+            l_red[get_local_id(0)] += l_red[get_local_id(0) + s];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float sum = l_red[0];
+#endif
 
     if (psrc2) {
         sum += exp(psrc2[i02] - max);
@@ -141,6 +169,9 @@ kernel void kernel_fa_decompose_soft_max_4_f16(
         float m1,
         int n_head_log2
 ) {
+#if !(defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS)))
+    local float l_red[64];
+#endif
     src0 = src0 + offset0;
     src1 = src1 + offset1;
     src2 = src2 + offset2;
@@ -178,7 +209,20 @@ kernel void kernel_fa_decompose_soft_max_4_f16(
     }
     float lmax = fmax(fmax(lmax4.s0, lmax4.s1), fmax(lmax4.s2, lmax4.s3));
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     float max = sub_group_reduce_max(lmax);
+#else
+    l_red[get_local_id(0)] = lmax;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int s = get_local_size(0) / 2; s > 0; s /= 2) {
+        if (get_local_id(0) < s) {
+            l_red[get_local_id(0)] = fmax(l_red[get_local_id(0)], l_red[get_local_id(0) + s]);
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float max = l_red[0];
+    barrier(CLK_LOCAL_MEM_FENCE);
+#endif
     // Avoid -inf - (-inf) for fully masked rows.
     if (max == -INFINITY) {
         max = 0.0f;
@@ -193,7 +237,19 @@ kernel void kernel_fa_decompose_soft_max_4_f16(
     }
     float lsum = lsum4.s0 + lsum4.s1 + lsum4.s2 + lsum4.s3;
 
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     float sum = sub_group_reduce_add(lsum);
+#else
+    l_red[get_local_id(0)] = lsum;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int s = get_local_size(0) / 2; s > 0; s /= 2) {
+        if (get_local_id(0) < s) {
+            l_red[get_local_id(0)] += l_red[get_local_id(0) + s];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float sum = l_red[0];
+#endif
 
     if (psrc2) {
         sum += exp(psrc2[i02] - max);
@@ -245,6 +301,9 @@ kernel void kernel_fa_p8_fixup(
         int row_blk,                // blocks per row of bmax/bsum/dp (the padded pitch), >= nblk
         int N
 ) {
+#if !(defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS)))
+    local float l_red[64];
+#endif
     const int n    = get_group_id(0);
     const int head = get_group_id(1);
     const uint row = (uint)head*(uint)N + (uint)n;
@@ -256,7 +315,20 @@ kernel void kernel_fa_p8_fixup(
     for (int b = get_local_id(0); b < nblk; b += get_local_size(0)) {
         lmax = fmax(lmax, bm[b]);
     }
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     float rowmax = sub_group_reduce_max(lmax);
+#else
+    l_red[get_local_id(0)] = lmax;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int s = get_local_size(0) / 2; s > 0; s /= 2) {
+        if (get_local_id(0) < s) {
+            l_red[get_local_id(0)] = fmax(l_red[get_local_id(0)], l_red[get_local_id(0) + s]);
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float rowmax = l_red[0];
+    barrier(CLK_LOCAL_MEM_FENCE);
+#endif
     float sink = 0.0f;
     if (has_sinks) {
         sink = ((global float *)(sinks + offset_sinks))[head];
@@ -271,7 +343,19 @@ kernel void kernel_fa_p8_fixup(
         dr[b] = f / 255.0f;
         lsum += bs[b]*f;
     }
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     float sum = sub_group_reduce_add(lsum);
+#else
+    l_red[get_local_id(0)] = lsum;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int s = get_local_size(0) / 2; s > 0; s /= 2) {
+        if (get_local_id(0) < s) {
+            l_red[get_local_id(0)] += l_red[get_local_id(0) + s];
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    float sum = l_red[0];
+#endif
     if (has_sinks && rowmax > -1.0e30f) {
         sum += exp(sink - rowmax);
     }
