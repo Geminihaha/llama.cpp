@@ -110,7 +110,7 @@ void top_k_select(
     }
     uint pos_greater;
     uint pos_equal;
-#ifdef cl_khr_subgroups
+#if defined(cl_khr_subgroups) && (__OPENCL_VERSION__ >= 300 || !defined(GGML_OPENCL_USE_ADRENO_KERNELS))
     const uint sg = get_sub_group_id();
     const uint nsg = get_num_sub_groups();
     const uint total_greater = sub_group_reduce_add(greater);
